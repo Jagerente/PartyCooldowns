@@ -1,0 +1,30 @@
+## Interface: 16001
+## Title: Party Cooldowns
+## Notes: Tracks important party cooldowns right next to the party frames.
+## Notes-ruRU: Отслеживает важные кулдауны группы рядом с пати-фреймами.
+## Version: 1.0.0
+## IconTexture: Interface\AddOns\PartyCooldowns\Media\Icon
+## SavedVariables: PartyCooldownsDB
+## SavedVariablesPerCharacter: PartyCooldownsCharDB
+## AddonCompartmentFunc: PartyCooldowns_OnAddonCompartmentClick
+
+Core\Init.lua
+Core\Locales.lua
+Data\Spells.lua
+Core\Database.lua
+Core\Spells.lua
+Core\Roster.lua
+Core\Members.lua
+Core\Comm.lua
+Core\Self.lua
+Core\PartyWatch.lua
+UI\Theme.lua
+UI\Anchors.lua
+UI\Icon.lua
+UI\Display.lua
+UI\TestMode.lua
+UI\Widgets.lua
+UI\MinimapButton.lua
+UI\About.lua
+UI\Options.lua
+Core\Commands.lua
