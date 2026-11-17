@@ -12,6 +12,15 @@ local classLists = {}
 local raceLists = {}
 local iconCache = {}
 
+local function NameSet(names)
+    if not names then return nil end
+    local set = {}
+    for _, name in ipairs(names) do
+        set[name] = true
+    end
+    return set
+end
+
 local function Register(entry, class, race)
     local info = {
         key = entry.id,
@@ -23,6 +32,9 @@ local function Register(entry, class, race)
         resets = entry.resets,
         class = class,
         race = race,
+        races = NameSet(entry.races),
+        raceList = entry.races,
+        faction = entry.faction,
         ranks = { entry.id },
     }
     for _, rank in ipairs(entry.ranks or EMPTY) do
@@ -128,8 +140,21 @@ function Spells.SetGroup(keys, enabled)
     ns.Fire("SETTING_CHANGED", "spells")
 end
 
+function Spells.IsAvailable(member, key)
+    local info = byKey[key]
+    if not info then return false end
+    if info.class then
+        if info.class ~= member.class then return false end
+    elseif info.race ~= member.race then
+        return false
+    end
+    if info.races and not (member.race and info.races[member.race]) then return false end
+    if info.faction and member.faction and info.faction ~= member.faction then return false end
+    return true
+end
+
 local function IsShownFor(member, key)
-    if not Spells.IsEnabled(key) then return false end
+    if not Spells.IsEnabled(key) or not Spells.IsAvailable(member, key) then return false end
     if member.synced then
         return member.known[key] == true
     end

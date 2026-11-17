@@ -82,6 +82,14 @@ local function PaintMocks()
     end
 end
 
+local function SeedSpell(member, key, now)
+    member.known[key] = true
+    if random() < START_ACTIVE_CHANCE then
+        local duration = ns.Spells.Get(key).cd
+        member.cds[key] = { start = now - random() * duration * 0.8, duration = duration }
+    end
+end
+
 local function SeedMember(index, entry)
     local member = ns.Members.Ensure(FakeGUID(index))
     member.class = entry.class
@@ -94,10 +102,8 @@ local function SeedMember(index, entry)
     wipe(member.cds)
     local now = GetTime()
     for _, key in ipairs(ns.Spells.ClassList(entry.class)) do
-        member.known[key] = true
-        if random() < START_ACTIVE_CHANCE then
-            local duration = ns.Spells.Get(key).cd
-            member.cds[key] = { start = now - random() * duration * 0.8, duration = duration }
+        if ns.Spells.IsAvailable(member, key) then
+            SeedSpell(member, key, now)
         end
     end
     overrideMap[entry.unit] = member.guid

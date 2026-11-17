@@ -10,7 +10,7 @@ Shows your party's important cooldowns next to the party frames in WoW Forever. 
 
 ## What it tracks
 
-Interrupts, crowd control, defensives and a few other big cooldowns for all nine classes, plus racials. You can turn each spell on or off in the settings. Talent spells only show up for players who actually have the talent.
+Interrupts, crowd control, defensives and a few other big cooldowns for all nine classes, plus racials of every race, Skyborne included. Priest spells that only one race gets, like Feedback for humans, show up only for priests of that race. You can turn each spell on or off in the settings. Talent spells only show up for players who actually have the talent.
 
 ![Spells tab with the mage's spells grouped by category](https://raw.githubusercontent.com/Jagerente/PartyCooldowns/main/branding/screenshots/spells.png)
 

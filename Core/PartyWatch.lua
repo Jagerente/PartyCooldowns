@@ -8,7 +8,7 @@ local function OnPartyCast(_, _, unit, _, spellID)
     local key = ns.Spells.KeyFor(spellID)
     local guid = key and ns.Roster.GUID(unit)
     local member = guid and ns.Members.Get(guid)
-    if not member or not ns.Members.Owns(member, key) then return end
+    if not member or not ns.Spells.IsAvailable(member, key) then return end
     local entry = member.cds[key]
     local now = GetTime()
     if entry and not entry.estimated and now - entry.start < SYNC_GRACE then return end

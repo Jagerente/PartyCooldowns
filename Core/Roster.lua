@@ -23,6 +23,7 @@ local function ReadUnit(unit)
     member.name = ns.Plain(UnitName(unit)) or member.name
     member.class = ns.Plain(Second(UnitClass(unit))) or member.class
     member.race = ns.Plain(Second(UnitRace(unit))) or member.race
+    member.faction = ns.Plain((UnitFactionGroup(unit))) or member.faction
     return guid
 end
 

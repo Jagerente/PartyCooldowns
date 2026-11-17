@@ -26,9 +26,9 @@ local CLASS_TAB_GAP, CLASS_TAB_BAR_SPACE = 6, 6
 local MEMBER_ROW_HEIGHT = 24
 local STATUS_INTERVAL = 1
 local RESET_CONFIRM_SECONDS = 3
-local RACE_IDS = { Human = 1, Orc = 2, Dwarf = 3, NightElf = 4, Scourge = 5, Tauren = 6, Gnome = 7, Troll = 8 }
 local RACIAL_TAB = "RACIAL"
 local TALENT_COLOR = CreateColor(unpack(C.talent))
+local RACE_TAG_COLOR = CreateColor(unpack(C.faint))
 
 local window
 local pages = {}
@@ -170,7 +170,7 @@ local function DescribeAnchor(side, align)
         local vertical = side == "LEFT" or side == "RIGHT"
         alignKey = "ALIGN_" .. align .. (vertical and "_V" or "_H")
     end
-    return L["SIDE_" .. side] .. "  ·  " .. L[alignKey]
+    return L["SIDE_" .. side] .. ", " .. L[alignKey]
 end
 
 local function AddSlider(page, key, label, min, max, gap)
@@ -203,9 +203,45 @@ local function BuildDisplay()
     AddToggle(page, "pulse", "PULSE", "PULSE_DESC")
 end
 
-local function RaceName(race)
-    local info = C_CreatureInfo and C_CreatureInfo.GetRaceInfo and C_CreatureInfo.GetRaceInfo(RACE_IDS[race])
+local function RaceID(race, faction)
+    local ids = ns.SpellData.RACE_IDS[race]
+    if not ids then return nil end
+    return ids[faction] or ids.Alliance or ids.Horde
+end
+
+local function RaceName(race, faction)
+    local id = RaceID(race, faction)
+    local info = id and C_CreatureInfo and C_CreatureInfo.GetRaceInfo and C_CreatureInfo.GetRaceInfo(id)
     return info and info.raceName or race
+end
+
+local function PlayerFaction()
+    return ns.Plain((UnitFactionGroup("player")))
+end
+
+local function RaceTag(info)
+    if info.faction then
+        return RaceName(info.race, info.faction)
+    end
+    if not info.raceList then return nil end
+    local names = {}
+    for i, race in ipairs(info.raceList) do
+        names[i] = RaceName(race)
+    end
+    return table.concat(names, ", ")
+end
+
+local function TaggedName(key)
+    local info = ns.Spells.Get(key)
+    local name = ns.Spells.Name(key)
+    if info.talent then
+        name = name .. "  " .. TALENT_COLOR:WrapTextInColorCode(L.TALENT_TAG)
+    end
+    local raceTag = RaceTag(info)
+    if raceTag then
+        name = name .. "  " .. RACE_TAG_COLOR:WrapTextInColorCode(raceTag)
+    end
+    return name
 end
 
 local ClassName = UI.ClassName
@@ -257,14 +293,9 @@ local function CreateSpellRow(parent, onToggle)
     end
 
     function row:SetSpell(key)
-        local info = ns.Spells.Get(key)
         self.key = key
         self.icon:SetTexture(ns.Spells.Icon(key))
-        local name = ns.Spells.Name(key)
-        if info.talent then
-            name = name .. "  " .. TALENT_COLOR:WrapTextInColorCode(L.TALENT_TAG)
-        end
-        self.name:SetText(name)
+        self.name:SetText(TaggedName(key))
         W.SetSwitch(self.switch, ns.Spells.IsEnabled(key), false)
         self:Paint()
     end
@@ -283,7 +314,7 @@ local function SpellGroups(tab)
     local groups = {}
     if tab == RACIAL_TAB then
         for _, race in ipairs(ns.SpellData.RACE_ORDER) do
-            groups[#groups + 1] = { title = RaceName(race), keys = ns.Spells.RaceList(race), color = C.accent }
+            groups[#groups + 1] = { title = RaceName(race, PlayerFaction()), keys = ns.Spells.RaceList(race), color = C.accent }
         end
         return groups
     end

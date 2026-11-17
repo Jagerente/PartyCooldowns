@@ -103,11 +103,6 @@ function Members.ApplyState(member, active)
     ns.Fire("MEMBER_CHANGED", member.guid)
 end
 
-function Members.Owns(member, key)
-    local info = ns.Spells.Get(key)
-    return info ~= nil and (info.class == member.class or info.race == member.race)
-end
-
 function Members.ApplyResets(member, key, onCleared)
     local resets = ns.Spells.Get(key).resets
     if not resets then return end

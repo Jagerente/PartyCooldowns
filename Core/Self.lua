@@ -109,7 +109,7 @@ local function OnCast(_, _, _, _, spellID)
     if ns.IsSecret(spellID) then return end
     local key = ns.Spells.KeyFor(spellID)
     local member = Member()
-    if not key or not member or not ns.Members.Owns(member, key) then return end
+    if not key or not member or not ns.Spells.IsAvailable(member, key) then return end
     if not knownRank[key] then
         Self.RefreshKnown()
     end
