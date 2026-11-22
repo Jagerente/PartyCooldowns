@@ -13,6 +13,7 @@ local SIMULATION_INTERVAL = 1
 local CAST_CHANCE = 0.06
 local START_ACTIVE_CHANCE = 0.5
 local MOCK_WIDTH, MOCK_HEIGHT, MOCK_GAP = 132, 40, 14
+local UNKNOWN_COOLDOWN_PREVIEW = 60
 
 local CAST = {
     { unit = "player", class = "PALADIN" },
@@ -82,10 +83,15 @@ local function PaintMocks()
     end
 end
 
+local function PreviewDuration(key)
+    local cd = ns.Spells.Get(key).cd
+    return cd > 0 and cd or UNKNOWN_COOLDOWN_PREVIEW
+end
+
 local function SeedSpell(member, key, now)
     member.known[key] = true
     if random() < START_ACTIVE_CHANCE then
-        local duration = ns.Spells.Get(key).cd
+        local duration = PreviewDuration(key)
         member.cds[key] = { start = now - random() * duration * 0.8, duration = duration }
     end
 end
@@ -116,7 +122,7 @@ local function Simulate()
         if member then
             for key in pairs(member.known) do
                 if ns.Members.Remaining(member, key, now) <= 0 and random() < CAST_CHANCE then
-                    ns.Members.StartCooldown(member, key, now, ns.Spells.Get(key).cd)
+                    ns.Members.StartCooldown(member, key, now, PreviewDuration(key))
                     ns.Members.ApplyResets(member, key)
                 end
             end
@@ -167,6 +173,18 @@ function TestMode.Toggle()
         TestMode.Start()
     end
 end
+
+local function ReseedPreview()
+    if not TestMode.active then return end
+    for index, entry in ipairs(CAST) do
+        SeedMember(index, entry)
+    end
+    ns.Display.QueueRefresh()
+end
+
+ns.Listen("CUSTOM_SPELLS_CHANGED", function(isLocal)
+    if isLocal then ReseedPreview() end
+end)
 
 ns.Listen("LOCALE_CHANGED", function()
     if TestMode.active then PaintMocks() end

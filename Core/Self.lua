@@ -14,6 +14,7 @@ local PET_BANK = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Pet
 
 local knownRank = {}
 local parts = {}
+local customKeys = {}
 
 local function Member()
     local guid = ns.Roster.PlayerGUID()
@@ -36,6 +37,16 @@ local function HighestKnownRank(info)
     end
 end
 
+local function KnownCustomRank(info)
+    local spell = C_Spell.GetSpellInfo(ns.Spells.Name(info.key))
+    local rank = spell and spell.spellID
+    if rank and IsKnown(rank) then
+        ns.Spells.AddRank(info.key, rank)
+        return rank
+    end
+    return HighestKnownRank(info)
+end
+
 local function ReadCooldown(spellID)
     local info = C_Spell.GetSpellCooldown(spellID)
     if not info or info.isEnabled == false or info.isOnGCD == true then return nil end
@@ -50,14 +61,37 @@ local function Number(value)
     return (format("%.1f", value):gsub("%.0$", ""))
 end
 
-local function ScanList(keys, member, changed)
+local function ScanSpell(key, member, findRank)
+    local rank = ns.Spells.IsAvailable(member, key) and findRank(ns.Spells.Get(key)) or nil
+    member.known[key] = rank ~= nil or nil
+    if knownRank[key] == rank then return false end
+    knownRank[key] = rank
+    return true
+end
+
+local function ScanList(keys, member, changed, custom)
+    local findRank = custom and KnownCustomRank or HighestKnownRank
     for _, key in ipairs(keys) do
-        local rank = HighestKnownRank(ns.Spells.Get(key))
-        if knownRank[key] ~= rank then
-            knownRank[key] = rank
+        if ns.Spells.Get(key).custom == custom and ScanSpell(key, member, findRank) then
             changed = true
         end
-        member.known[key] = rank ~= nil or nil
+    end
+    return changed
+end
+
+local function ForgetRemovedSpells(member)
+    local changed = false
+    for key in pairs(knownRank) do
+        if not ns.Spells.Get(key) then
+            knownRank[key] = nil
+            changed = true
+        end
+    end
+    for key in pairs(member.known) do
+        if not ns.Spells.Get(key) then
+            member.known[key] = nil
+            member.cds[key] = nil
+        end
     end
     return changed
 end
@@ -67,10 +101,16 @@ function Self.RefreshKnown()
     if not member or not member.class then return end
     member.synced = true
     member.durations = ns.charDB.learned
-    local changed = ScanList(ns.Spells.ClassList(member.class), member, false)
-    changed = ScanList(ns.Spells.RaceList(member.race), member, changed)
-    if changed then
+    local builtinChanged = ScanList(ns.Spells.ClassList(member.class), member, false, false)
+    builtinChanged = ScanList(ns.Spells.RaceList(member.race), member, builtinChanged, false)
+    local customChanged = ForgetRemovedSpells(member)
+    customChanged = ScanList(ns.Spells.CustomKeys(customKeys), member, customChanged, true)
+    if builtinChanged then
         ns.Comm.QueueHello()
+    elseif customChanged then
+        ns.Comm.QueueCustomKnown()
+    end
+    if builtinChanged or customChanged then
         ns.Fire("MEMBER_CHANGED", member.guid)
     end
 end
@@ -113,8 +153,11 @@ local function OnCast(_, _, _, _, spellID)
     if not knownRank[key] then
         Self.RefreshKnown()
     end
-    ns.Members.StartCooldown(member, key, GetTime(), ns.Members.Duration(member, key))
-    ns.Comm.QueueCooldown(key)
+    local duration = ns.Members.Duration(member, key)
+    if duration > 0 then
+        ns.Members.StartCooldown(member, key, GetTime(), duration)
+        ns.Comm.QueueCooldown(key)
+    end
     ns.Members.ApplyResets(member, key, QueueReset)
     C_Timer.After(VERIFY_DELAY, function() Self.Verify(key) end)
 end
@@ -125,34 +168,50 @@ local function Append(item, length)
     return length + #item + 1, true
 end
 
-function Self.EncodeKnown()
+local function EncodeKnownPart(custom)
     local member = Member()
     if not member then return "" end
     wipe(parts)
     local length = 0
     for key in pairs(member.known) do
-        local duration = member.durations[key]
-        local item = duration and (key .. ":" .. Number(duration)) or tostring(key)
-        local ok
-        length, ok = Append(item, length)
-        if not ok then break end
+        if ns.Spells.IsCustom(key) == custom then
+            local duration = member.durations[key]
+            local item = duration and (key .. ":" .. Number(duration)) or tostring(key)
+            local ok
+            length, ok = Append(item, length)
+            if not ok then break end
+        end
     end
     return concat(parts, ",")
+end
+
+function Self.EncodeKnown()
+    return EncodeKnownPart(false)
+end
+
+function Self.EncodeCustomKnown()
+    return EncodeKnownPart(true)
+end
+
+local function AppendActive(member, now, length, custom)
+    for key, entry in pairs(member.cds) do
+        local remaining = entry.start + entry.duration - now
+        if remaining > 0 and ns.Spells.IsCustom(key) == custom then
+            local ok
+            length, ok = Append(key .. ":" .. Number(entry.duration) .. ":" .. Number(remaining), length)
+            if not ok then return length, false end
+        end
+    end
+    return length, true
 end
 
 function Self.EncodeActive()
     local member = Member()
     if not member then return "" end
     wipe(parts)
-    local now, length = GetTime(), 0
-    for key, entry in pairs(member.cds) do
-        local remaining = entry.start + entry.duration - now
-        if remaining > 0 then
-            local ok
-            length, ok = Append(key .. ":" .. Number(entry.duration) .. ":" .. Number(remaining), length)
-            if not ok then break end
-        end
-    end
+    local now = GetTime()
+    local length, ok = AppendActive(member, now, 0, false)
+    if ok then AppendActive(member, now, length, true) end
     return concat(parts, ",")
 end
 
@@ -184,6 +243,7 @@ ns.Listen("ROSTER_CHANGED", function()
     end
 end)
 
+ns.Listen("CUSTOM_SPELLS_CHANGED", Self.RefreshKnown)
 ns.RegisterEvent("SPELLS_CHANGED", QueueRefresh)
 ns.RegisterEvent("UNIT_PET", function(unit)
     if unit == "player" then QueueRefresh() end

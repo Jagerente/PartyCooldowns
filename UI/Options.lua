@@ -22,6 +22,9 @@ local PICKER_HEIGHT = 150
 local SLIDER_GAP = 8
 local SPELL_ROW_HEIGHT = 26
 local GROUP_HEADER_HEIGHT = 20
+local REMOVE_BUTTON_SIZE = 20
+local CUSTOM_INPUT_HEIGHT = 22
+local CUSTOM_GAP = 4
 local CLASS_TAB_GAP, CLASS_TAB_BAR_SPACE = 6, 6
 local MEMBER_ROW_HEIGHT = 24
 local STATUS_INTERVAL = 1
@@ -190,7 +193,7 @@ local function BuildDisplay()
     AddSlider(page, "offsetY", "OFFSET_Y", -150, 150)
 
     AddHeading(page, "SECTION_ICONS")
-    AddSlider(page, "size", "ICON_SIZE", 14, 64, 4)
+    AddSlider(page, "size", "ICON_SIZE", 14, 64, 12)
     AddSlider(page, "spacing", "SPACING", 0, 16)
     AddSlider(page, "perRow", "PER_ROW", 1, 12)
 
@@ -246,6 +249,27 @@ end
 
 local ClassName = UI.ClassName
 
+local function CreateRemoveButton(row)
+    local button = CreateFrame("Button", nil, row)
+    button:SetSize(REMOVE_BUTTON_SIZE, REMOVE_BUTTON_SIZE)
+    local cross = UI.Text(button, 16, C.muted)
+    cross:SetPoint("CENTER", 0, 1)
+    cross:SetText("×")
+    button:SetScript("OnClick", function() ns.Custom.Remove(row.key) end)
+    button:SetScript("OnEnter", function(self)
+        cross:SetTextColor(unpack(C.bad))
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.CUSTOM_REMOVE, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        cross:SetTextColor(unpack(C.muted))
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    button:Hide()
+    return button
+end
+
 local function CreateSpellRow(parent, onToggle)
     local row = CreateFrame("Button", nil, parent)
     row:SetSize(PAGE_WIDTH, SPELL_ROW_HEIGHT)
@@ -262,9 +286,10 @@ local function CreateSpellRow(parent, onToggle)
 
     row.switch = W.CreateSwitch(row)
     row.switch:SetPoint("RIGHT")
+    row.remove = CreateRemoveButton(row)
+    row.remove:SetPoint("RIGHT", row.switch, "LEFT", -8, 0)
     row.name = UI.Text(row, T.body, C.text)
     row.name:SetPoint("LEFT", iconFrame, "RIGHT", 10, 0)
-    row.name:SetPoint("RIGHT", row.switch, "LEFT", -12, 0)
     row.name:SetJustifyH("LEFT")
 
     row:SetScript("OnClick", function(self)
@@ -292,8 +317,10 @@ local function CreateSpellRow(parent, onToggle)
         self.name:SetTextColor(unpack(enabled and C.text or C.muted))
     end
 
-    function row:SetSpell(key)
+    function row:SetSpell(key, removable)
         self.key = key
+        self.remove:SetShown(removable)
+        self.name:SetPoint("RIGHT", removable and self.remove or self.switch, "LEFT", removable and -6 or -12, 0)
         self.icon:SetTexture(ns.Spells.Icon(key))
         self.name:SetText(TaggedName(key))
         W.SetSwitch(self.switch, ns.Spells.IsEnabled(key), false)
@@ -320,15 +347,18 @@ local function SpellGroups(tab)
     end
     local byCategory = {}
     for _, key in ipairs(ns.Spells.ClassList(tab)) do
-        local cat = ns.Spells.Get(key).cat
-        byCategory[cat] = byCategory[cat] or {}
-        table.insert(byCategory[cat], key)
+        local info = ns.Spells.Get(key)
+        if not info.custom then
+            byCategory[info.cat] = byCategory[info.cat] or {}
+            table.insert(byCategory[info.cat], key)
+        end
     end
     for _, cat in ipairs(ns.CATEGORIES) do
         if byCategory[cat] then
             groups[#groups + 1] = { title = L["CAT_" .. cat], keys = byCategory[cat], color = UI.CATEGORY_COLORS[cat] }
         end
     end
+    groups[#groups + 1] = { title = L.CUSTOM_SPELLS, keys = ns.Custom.KeysFor(tab, {}), color = C.accent, custom = true }
     return groups
 end
 
@@ -376,6 +406,56 @@ local function CreateClassTab(page, parent, tab, index, size)
     return button
 end
 
+local function CreateCustomMessage(parent)
+    local frame = CreateFrame("Frame", nil, parent)
+    frame:SetWidth(PAGE_WIDTH)
+    local text = UI.Text(frame, T.label, C.muted)
+    text:SetPoint("TOPLEFT")
+    text:SetWidth(PAGE_WIDTH)
+    text:SetWordWrap(true)
+    text:SetJustifyH("LEFT")
+    text:SetSpacing(3)
+    local function Fit()
+        frame:SetHeight(math.floor(text:GetStringHeight() + 4))
+    end
+    function frame:SetMessage(message, color)
+        text:SetText(message)
+        text:SetTextColor(unpack(color))
+        Fit()
+    end
+    frame:SetScript("OnShow", Fit)
+    frame:Hide()
+    return frame
+end
+
+local function DescribeAddError(errorKey, key)
+    if errorKey == "CUSTOM_ERROR_LIMIT" then
+        return string.format(L.CUSTOM_ERROR_LIMIT, ns.Custom.MAX_SPELLS)
+    end
+    if not key then return L[errorKey] end
+    local info = ns.Spells.Get(key)
+    local tab = info.class and ClassName(info.class) or L.RACIALS
+    return string.format(L[errorKey], ns.Spells.Name(key), tab)
+end
+
+local function CreateCustomInput(page)
+    local row = CreateFrame("Frame", nil, page.content)
+    row:SetSize(PAGE_WIDTH, CUSTOM_INPUT_HEIGHT)
+    local function Submit() page:AddCustom() end
+    local add = W.Button(row, "CUSTOM_ADD", Submit)
+    add:SetPoint("RIGHT")
+    row.input = W.TextInput(row, {
+        placeholder = "CUSTOM_PLACEHOLDER",
+        hint = "CUSTOM_PLACEHOLDER_DESC",
+        onSubmit = Submit,
+        onChange = function() page:ShowCustomHint() end,
+    })
+    row.input:SetPoint("LEFT")
+    row.input:SetPoint("RIGHT", add, "LEFT", -6, 0)
+    row:Hide()
+    return row
+end
+
 local function BuildSpells()
     local page = NewPage("spells")
 
@@ -417,6 +497,24 @@ local function BuildSpells()
     page.rows = {}
     page.headers = {}
     page.firstListIndex = #page.stack.frames + 1
+    page.customInput = CreateCustomInput(page)
+    page.customMessage = CreateCustomMessage(page.content)
+
+    function page:ShowCustomHint()
+        self.customMessage:SetMessage(L.CUSTOM_HINT, C.muted)
+    end
+
+    function page:AddCustom()
+        local input = self.customInput.input
+        local ok, errorKey, key = ns.Custom.Add(input:GetText(), self.tab)
+        if not ok then
+            self.customMessage:SetMessage(DescribeAddError(errorKey, key), C.bad)
+            return
+        end
+        input:SetText("")
+        input:ClearFocus()
+        self:ShowCustomHint()
+    end
 
     function page:PaintCount()
         local keys = GroupKeys(self.tab)
@@ -433,7 +531,11 @@ local function BuildSpells()
         page.stack.frames[#page.stack.frames + 1] = frame
     end
 
-    function page:Select(tab)
+    function page:Select(tab, keepScroll)
+        if self.tab ~= tab then
+            self.customInput.input:SetText("")
+            self:ShowCustomHint()
+        end
         self.tab = tab
         for _, button in ipairs(self.tabs) do
             local selected = button.tab == tab
@@ -458,24 +560,38 @@ local function BuildSpells()
             header.text:SetText(group.title)
             header.text:SetTextColor(unpack(group.color))
             Append(header, groupIndex == 1 and 2 or 6)
+            if group.custom then
+                Append(self.customInput, CUSTOM_GAP)
+                Append(self.customMessage, CUSTOM_GAP)
+            end
             for _, key in ipairs(group.keys) do
                 rowIndex = rowIndex + 1
                 local row = self.rows[rowIndex] or CreateSpellRow(self.content, function() page:PaintCount() end)
                 self.rows[rowIndex] = row
-                row:SetSpell(key)
+                row:SetSpell(key, group.custom == true)
                 Append(row, 0)
             end
         end
         self:PaintCount()
         self.stack:Reflow()
-        self.scroll:ScrollTo(0, false)
+        if not keepScroll then
+            self.scroll:ScrollTo(0, false)
+        end
     end
 
     function page:OnShow()
         self:Select(self.tab or select(2, UnitClass("player")) or "MAGE")
     end
     W.OnLocale(function()
-        if page.tab then page:Select(page.tab) end
+        if page.tab then
+            page:ShowCustomHint()
+            page:Select(page.tab, true)
+        end
+    end)
+    ns.Listen("CUSTOM_SPELLS_CHANGED", function(isLocal)
+        if isLocal and page.tab and currentPage == page and window:IsShown() then
+            page:Select(page.tab, true)
+        end
     end)
 end
 

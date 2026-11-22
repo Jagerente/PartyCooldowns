@@ -12,7 +12,9 @@ local function OnPartyCast(_, _, unit, _, spellID)
     local entry = member.cds[key]
     local now = GetTime()
     if entry and not entry.estimated and now - entry.start < SYNC_GRACE then return end
-    ns.Members.StartCooldown(member, key, now, ns.Members.Duration(member, key), not member.synced)
+    local duration = ns.Members.Duration(member, key)
+    if duration <= 0 then return end
+    ns.Members.StartCooldown(member, key, now, duration, not member.synced)
     ns.Members.ApplyResets(member, key)
 end
 

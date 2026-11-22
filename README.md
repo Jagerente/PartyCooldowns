@@ -10,9 +10,15 @@ Shows your party's important cooldowns next to the party frames in WoW Forever. 
 
 ## What it tracks
 
-Interrupts, crowd control, defensives and a few other big cooldowns for all nine classes, plus racials of every race, Skyborne included. Priest spells that only one race gets, like Feedback for humans, show up only for priests of that race. You can turn each spell on or off in the settings. Talent spells only show up for players who actually have the talent.
+Interrupts, crowd control, defensives and a few other big cooldowns for all nine classes, plus racials of every race, Skyborne included. Priest spells that only one race gets, like Feedback for humans, show up only for priests of that race. You can turn each spell on or off in the settings. Talent spells only show up for players who actually have the talent. If a spell you need is missing, you can add it yourself.
 
 ![Spells tab with the mage's spells grouped by category](https://raw.githubusercontent.com/Jagerente/PartyCooldowns/main/branding/screenshots/spells.png)
+
+## Custom spells
+
+Open the Spells tab, pick the class and type the spell ID into the field under **Custom spells**, then press **Add** or Enter. Any rank of the spell works. The name works too, but only for spells in your own spellbook. You can add up to 20 spells, and the × next to a spell removes it.
+
+A custom spell shows up for party members who have an up-to-date Party Cooldowns and know the spell. Their addon learns the list from yours, so they don't have to add the spell themselves. The timer comes from their game after the first cast. Players without the addon never show custom spells, because Forever hides their casts.
 
 ## Party frames
 

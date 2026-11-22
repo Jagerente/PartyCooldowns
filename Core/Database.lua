@@ -22,6 +22,7 @@ local DEFAULTS = {
     pulse = true,
     minimap = { hide = false, angle = 200 },
     spells = {},
+    custom = {},
 }
 
 local CHAR_DEFAULTS = {
@@ -60,7 +61,9 @@ function ns.Set(key, value)
 end
 
 function ns.ResetSettings()
+    local custom = ns.db.custom
     wipe(ns.db)
     ApplyDefaults(ns.db, DEFAULTS)
+    ns.db.custom = custom
     ns.Fire("SETTING_CHANGED")
 end

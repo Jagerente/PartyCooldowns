@@ -5,9 +5,11 @@ ns.Spells = Spells
 
 local EMPTY = {}
 local FALLBACK_ICON = 134400
+local MS_PER_SECOND = 1000
 
 local byKey = {}
 local rankToKey = {}
+local builtinClassLists = {}
 local classLists = {}
 local raceLists = {}
 local iconCache = {}
@@ -29,6 +31,7 @@ local function Register(entry, class, race)
         default = entry.on == true,
         talent = entry.talent == true,
         pet = entry.pet == true,
+        custom = false,
         resets = entry.resets,
         class = class,
         race = race,
@@ -58,7 +61,7 @@ end
 local function ExpandClassResets(info)
     if info.resets ~= "class" then return end
     local resets = {}
-    for _, key in ipairs(classLists[info.class]) do
+    for _, key in ipairs(builtinClassLists[info.class]) do
         if key ~= info.key then
             resets[#resets + 1] = key
         end
@@ -67,7 +70,8 @@ local function ExpandClassResets(info)
 end
 
 for class, entries in pairs(ns.SpellData.classes) do
-    classLists[class] = BuildList(entries, class, nil)
+    builtinClassLists[class] = BuildList(entries, class, nil)
+    classLists[class] = builtinClassLists[class]
 end
 
 for race, entries in pairs(ns.SpellData.races) do
@@ -76,6 +80,100 @@ end
 
 for _, info in pairs(byKey) do
     ExpandClassResets(info)
+end
+
+local function BaseCooldown(spellID)
+    local milliseconds = GetSpellBaseCooldown and GetSpellBaseCooldown(spellID)
+    if type(milliseconds) ~= "number" or milliseconds <= 0 then return 0 end
+    return milliseconds / MS_PER_SECOND
+end
+
+local function RegisterCustom(spellID)
+    local info = {
+        key = spellID,
+        cd = BaseCooldown(spellID),
+        default = true,
+        custom = true,
+        ranks = { spellID },
+    }
+    byKey[spellID] = info
+    rankToKey[spellID] = spellID
+    return info
+end
+
+local function UnregisterCustom(info)
+    for _, rank in ipairs(info.ranks) do
+        if rankToKey[rank] == info.key then
+            rankToKey[rank] = nil
+        end
+    end
+    byKey[info.key] = nil
+end
+
+local function IsBuiltin(spellID)
+    local key = rankToKey[spellID]
+    return key ~= nil and not byKey[key].custom
+end
+
+local function RebuildClassLists(entries)
+    for class, builtin in pairs(builtinClassLists) do
+        local list = {}
+        for i = 1, #builtin do
+            list[i] = builtin[i]
+        end
+        classLists[class] = list
+    end
+    for _, entry in ipairs(entries) do
+        local list = entry.class and classLists[entry.class]
+        if list and byKey[entry.id] then
+            list[#list + 1] = entry.id
+        end
+    end
+end
+
+function Spells.SetCustom(entries)
+    local wanted = {}
+    for _, entry in ipairs(entries) do
+        wanted[entry.id] = true
+    end
+    for key, info in pairs(byKey) do
+        if info.custom and not wanted[key] then
+            UnregisterCustom(info)
+        end
+    end
+    for _, entry in ipairs(entries) do
+        if not IsBuiltin(entry.id) then
+            local info = byKey[entry.id] or RegisterCustom(entry.id)
+            info.class = entry.class
+        end
+    end
+    RebuildClassLists(entries)
+end
+
+function Spells.AddRank(key, rank)
+    local info = byKey[key]
+    if not info or rankToKey[rank] then return end
+    rankToKey[rank] = key
+    info.ranks[#info.ranks + 1] = rank
+end
+
+function Spells.IsBuiltin(spellID)
+    return IsBuiltin(spellID)
+end
+
+function Spells.IsCustom(key)
+    local info = byKey[key]
+    return info == nil or info.custom == true
+end
+
+function Spells.CustomKeys(out)
+    wipe(out)
+    for key, info in pairs(byKey) do
+        if info.custom then
+            out[#out + 1] = key
+        end
+    end
+    return out
 end
 
 function Spells.Get(key)
@@ -100,10 +198,10 @@ end
 
 function Spells.Icon(key)
     local icon = iconCache[key]
-    if not icon then
-        icon = C_Spell.GetSpellTexture(key) or FALLBACK_ICON
-        iconCache[key] = icon
-    end
+    if icon then return icon end
+    icon = C_Spell.GetSpellTexture(key)
+    if not icon then return FALLBACK_ICON end
+    iconCache[key] = icon
     return icon
 end
 
@@ -145,7 +243,7 @@ function Spells.IsAvailable(member, key)
     if not info then return false end
     if info.class then
         if info.class ~= member.class then return false end
-    elseif info.race ~= member.race then
+    elseif info.race and info.race ~= member.race then
         return false
     end
     if info.races and not (member.race and info.races[member.race]) then return false end
@@ -158,7 +256,8 @@ local function IsShownFor(member, key)
     if member.synced then
         return member.known[key] == true
     end
-    return not byKey[key].talent or member.cds[key] ~= nil
+    local info = byKey[key]
+    return not (info.talent or info.custom) or member.cds[key] ~= nil
 end
 
 local function Collect(member, keys, out)

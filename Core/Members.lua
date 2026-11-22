@@ -34,7 +34,8 @@ function Members.Each()
 end
 
 function Members.Duration(member, key)
-    return member.durations[key] or ns.Spells.Get(key).cd
+    local info = ns.Spells.Get(key)
+    return member.durations[key] or info and info.cd or 0
 end
 
 function Members.Remaining(member, key, now)
@@ -77,10 +78,12 @@ function Members.ApplyRemote(member, key, duration, remaining)
     end
 end
 
-function Members.ApplyHello(member, version, known, durations)
-    member.synced = true
-    member.version = version
-    wipe(member.known)
+local function ReplaceKnown(member, known, durations, custom)
+    for key in pairs(member.known) do
+        if ns.Spells.IsCustom(key) == custom then
+            member.known[key] = nil
+        end
+    end
     for key in pairs(known) do
         member.known[key] = true
     end
@@ -88,6 +91,16 @@ function Members.ApplyHello(member, version, known, durations)
         member.durations[key] = duration
     end
     ns.Fire("MEMBER_CHANGED", member.guid)
+end
+
+function Members.ApplyHello(member, version, known, durations)
+    member.synced = true
+    member.version = version
+    ReplaceKnown(member, known, durations, false)
+end
+
+function Members.ApplyCustomKnown(member, known, durations)
+    ReplaceKnown(member, known, durations, true)
 end
 
 function Members.ApplyState(member, active)

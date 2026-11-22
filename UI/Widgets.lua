@@ -620,3 +620,42 @@ function Widgets.Stack(content, inset)
     Widgets.AfterLocale(Reflow)
     return stack
 end
+
+local INPUT_HEIGHT, INPUT_INSET = 22, 8
+
+function Widgets.TextInput(parent, opts)
+    local box = CreateFrame("EditBox", nil, parent)
+    box:SetHeight(INPUT_HEIGHT)
+    box:SetAutoFocus(false)
+    box:SetTextInsets(INPUT_INSET, INPUT_INSET, 0, 0)
+    box:SetFontObject(UI.Font(T.body))
+    box:SetTextColor(unpack(C.text))
+    local fill = box:CreateTexture(nil, "BACKGROUND")
+    fill:SetAllPoints()
+    Widgets.HoverFill(box, fill, C.control, C.controlHover)
+    local placeholder = UI.Text(box, T.body, C.faint)
+    placeholder:SetPoint("LEFT", INPUT_INSET, 0)
+    placeholder:SetPoint("RIGHT", -INPUT_INSET, 0)
+    placeholder:SetJustifyH("LEFT")
+    Widgets.Bind(placeholder, opts.placeholder)
+    local function Paint()
+        placeholder:SetShown(box:GetText() == "" and not box:HasFocus())
+    end
+    box:SetScript("OnTextChanged", function(self, userInput)
+        Paint()
+        if userInput and opts.onChange then opts.onChange(self:GetText()) end
+    end)
+    box:SetScript("OnEditFocusGained", Paint)
+    box:SetScript("OnEditFocusLost", Paint)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText("")
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEnterPressed", function(self)
+        opts.onSubmit(self:GetText())
+    end)
+    box:HookScript("OnEnter", function(self) ShowHint(self, opts.hint) end)
+    box:HookScript("OnLeave", HideHint)
+    Paint()
+    return box
+end
