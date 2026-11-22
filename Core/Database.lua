@@ -20,6 +20,7 @@ local DEFAULTS = {
     swipe = true,
     desaturate = true,
     pulse = true,
+    skin = "flat",
     minimap = { hide = false, angle = 200 },
     spells = {},
     custom = {},

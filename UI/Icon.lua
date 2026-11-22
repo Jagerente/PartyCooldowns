@@ -9,6 +9,12 @@ ns.Icon = Icon
 local ceil, format = math.ceil, string.format
 
 local TEXCOORD_INSET = 0.08
+local FLAT_SWIPE_ALPHA = 0.72
+local BLIZZARD_FRAME_ATLAS = "UI-HUD-ActionBar-IconFrame"
+local BLIZZARD_MASK_ATLAS = "UI-HUD-ActionBar-IconFrame-Mask"
+local BLIZZARD_BUTTON_SIZE, BLIZZARD_FRAME_WIDTH, BLIZZARD_COOLDOWN_INSET = 45, 46, 3
+local BLIZZARD_MASK_SIZE = 64
+local BLIZZARD_SWIPE_ALPHA = 0.64
 local URGENT_SECONDS = 5
 local PULSE_SCALE = 1.22
 local UNKNOWN_ALPHA = 0.45
@@ -46,6 +52,7 @@ local function CreatePulse(button)
 
     local flash = button.overlay:CreateTexture(nil, "OVERLAY")
     flash:SetAllPoints(button.icon)
+    button.flashTexture = flash
     flash:SetColorTexture(1, 1, 1, 1)
     flash:SetBlendMode("ADD")
     flash:SetAlpha(0)
@@ -91,15 +98,16 @@ function Icon.Create(parent)
     button.background = UI.Fill(button, { 0, 0, 0, 0.85 }, "BACKGROUND")
 
     local icon = button:CreateTexture(nil, "ARTWORK")
-    icon:SetTexCoord(TEXCOORD_INSET, 1 - TEXCOORD_INSET, TEXCOORD_INSET, 1 - TEXCOORD_INSET)
     button.icon = icon
 
+    button.mask = button:CreateMaskTexture()
+    button.mask:SetAtlas(BLIZZARD_MASK_ATLAS)
+    button.mask:SetPoint("CENTER", icon)
+
     local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
-    cooldown:SetAllPoints(icon)
     cooldown:SetDrawEdge(false)
     cooldown:SetDrawBling(false)
     cooldown:SetHideCountdownNumbers(true)
-    cooldown:SetSwipeColor(0, 0, 0, 0.72)
     cooldown.noCooldownCount = true
     button.cooldown = cooldown
 
@@ -108,6 +116,9 @@ function Icon.Create(parent)
     overlay:SetFrameLevel(cooldown:GetFrameLevel() + 2)
     button.overlay = overlay
     button.border = UI.Border(overlay, UI.COLORS.iconBorder, "OVERLAY")
+    button.frame = overlay:CreateTexture(nil, "ARTWORK")
+    button.frame:SetAtlas(BLIZZARD_FRAME_ATLAS)
+    button.frame:SetPoint("TOPLEFT")
 
     button.timer = overlay:CreateFontString(nil, "OVERLAY")
     button.timer:SetPoint("CENTER", 1, 0)
@@ -118,19 +129,76 @@ function Icon.Create(parent)
     return button
 end
 
-function Icon.Configure(button, size)
-    local db = ns.db
-    button:SetSize(size, size)
-    local pixel = UI.PixelSize(button)
+local function SetMasked(button, masked)
+    if button.masked == masked then return end
+    button.masked = masked
+    if masked then
+        button.icon:AddMaskTexture(button.mask)
+        button.flashTexture:AddMaskTexture(button.mask)
+    else
+        button.icon:RemoveMaskTexture(button.mask)
+        button.flashTexture:RemoveMaskTexture(button.mask)
+    end
+end
+
+local function SetBorderShown(button, shown)
+    for _, texture in ipairs(button.border) do
+        texture:SetShown(shown)
+    end
+end
+
+local function ApplyFlatSkin(button, _, pixel)
     button.icon:ClearAllPoints()
     button.icon:SetPoint("TOPLEFT", pixel, -pixel)
     button.icon:SetPoint("BOTTOMRIGHT", -pixel, pixel)
+    button.icon:SetTexCoord(TEXCOORD_INSET, 1 - TEXCOORD_INSET, TEXCOORD_INSET, 1 - TEXCOORD_INSET)
+    SetMasked(button, false)
+    button.background:Show()
+    button.frame:Hide()
     UI.UpdateBorder(button.overlay, button.border)
+    SetBorderShown(button, true)
+    button.cooldown:ClearAllPoints()
+    button.cooldown:SetAllPoints(button.icon)
+    button.cooldown:SetSwipeColor(0, 0, 0, FLAT_SWIPE_ALPHA)
+end
+
+local function ApplyBlizzardSkin(button, size)
+    local scale = size / BLIZZARD_BUTTON_SIZE
+    local inset = BLIZZARD_COOLDOWN_INSET * scale
+    button.icon:ClearAllPoints()
+    button.icon:SetAllPoints(button)
+    button.icon:SetTexCoord(0, 1, 0, 1)
+    button.mask:SetSize(BLIZZARD_MASK_SIZE * scale, BLIZZARD_MASK_SIZE * scale)
+    SetMasked(button, true)
+    button.background:Hide()
+    button.frame:SetSize(BLIZZARD_FRAME_WIDTH * scale, size)
+    button.frame:Show()
+    SetBorderShown(button, false)
+    button.cooldown:ClearAllPoints()
+    button.cooldown:SetPoint("TOPLEFT", button.icon, "TOPLEFT", inset, -inset)
+    button.cooldown:SetPoint("BOTTOMRIGHT", button.icon, "BOTTOMRIGHT", -inset, inset)
+    button.cooldown:SetSwipeColor(0, 0, 0, BLIZZARD_SWIPE_ALPHA)
+end
+
+local SKINS = {
+    flat = { apply = ApplyFlatSkin, font = UI.NumberFont },
+    blizzard = { apply = ApplyBlizzardSkin, font = UI.GameFont },
+}
+
+local function ApplySkin(button, size, skinName)
+    local skin = SKINS[skinName] or SKINS.flat
+    local pixel = UI.PixelSize(button)
+    if button.skin == skin and button.skinSize == size and button.skinPixel == pixel then return end
+    button.skin, button.skinSize, button.skinPixel = skin, size, pixel
+    skin.apply(button, size, pixel)
     local fontSize = math.max(MIN_FONT, math.floor(size * FONT_RATIO))
-    if button.fontSize ~= fontSize then
-        button.timer:SetFontObject(UI.NumberFont(fontSize, "OUTLINE"))
-        button.fontSize = fontSize
-    end
+    button.timer:SetFontObject(skin.font(fontSize, "OUTLINE"))
+end
+
+function Icon.Configure(button, size)
+    local db = ns.db
+    button:SetSize(size, size)
+    ApplySkin(button, size, db.skin)
     button.cooldown:SetDrawSwipe(db.swipe)
     button:EnableMouse(db.tooltips)
     if button.SetMouseClickEnabled then

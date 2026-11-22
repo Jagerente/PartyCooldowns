@@ -45,6 +45,7 @@ The Sync tab in the settings shows who in your group has the addon.
 Type `/pcd` or click the minimap button. In the settings you can change:
 
 - which side of the frame the icons go on, and the offset
+- icon look: flat with a thin black border, or Blizzard with the same frame as your action buttons
 - icon size, spacing and how many fit in a row
 - countdown text, the clock sweep, grey icons while on cooldown and a flash when a spell is ready
 

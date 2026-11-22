@@ -64,6 +64,9 @@ STRINGS.enUS = {
     ICON_SIZE = "Icon size",
     SPACING = "Space between icons",
     PER_ROW = "Icons per row",
+    ICON_SKIN = "Icon look",
+    SKIN_flat = "Flat",
+    SKIN_blizzard = "Blizzard",
 
     SECTION_TIMER = "Timer",
     SECTION_STYLE = "Style",
@@ -187,6 +190,9 @@ STRINGS.ruRU = {
     ICON_SIZE = "Размер иконок",
     SPACING = "Отступ между иконками",
     PER_ROW = "Иконок в ряду",
+    ICON_SKIN = "Вид иконок",
+    SKIN_flat = "Плоский",
+    SKIN_blizzard = "Blizzard",
 
     SECTION_TIMER = "Таймер",
     SECTION_STYLE = "Стиль",

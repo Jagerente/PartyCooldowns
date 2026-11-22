@@ -42,7 +42,9 @@ local FACES = {
     regular = FONT_DIR .. "FiraSans-Regular.ttf",
     bold = FONT_DIR .. "FiraSans-Medium.ttf",
     number = "Fonts\\ARIALN.TTF",
+    game = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF",
 }
+local OWN_FACES = { regular = true, bold = true }
 
 local OTHER_ALPHABETS = {
     { "korean", "Fonts\\2002.TTF" },
@@ -69,7 +71,7 @@ local function BuildFont(weight, size, flags)
     fontSerial = fontSerial + 1
     local name = "PartyCooldownsFont" .. fontSerial
     local face = FACES[weight]
-    local font = weight ~= "number" and BuildFamily(name, face, size, flags)
+    local font = OWN_FACES[weight] and BuildFamily(name, face, size, flags)
     if font then return font end
     font = CreateFont(name)
     font:SetFont(face, size, flags)
@@ -98,6 +100,10 @@ end
 
 function UI.NumberFont(size, flags)
     return CachedFont("number", size, flags)
+end
+
+function UI.GameFont(size, flags)
+    return CachedFont("game", size, flags)
 end
 
 local function NewText(parent, font, color, layer)

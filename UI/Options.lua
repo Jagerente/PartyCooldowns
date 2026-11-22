@@ -30,6 +30,7 @@ local MEMBER_ROW_HEIGHT = 24
 local STATUS_INTERVAL = 1
 local RESET_CONFIRM_SECONDS = 3
 local RACIAL_TAB = "RACIAL"
+local SKINS = { "flat", "blizzard" }
 local TALENT_COLOR = CreateColor(unpack(C.talent))
 local RACE_TAG_COLOR = CreateColor(unpack(C.faint))
 
@@ -193,6 +194,12 @@ local function BuildDisplay()
     AddSlider(page, "offsetY", "OFFSET_Y", -150, 150)
 
     AddHeading(page, "SECTION_ICONS")
+    local getSkin, setSkin = Setting("skin")
+    page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
+        label = "ICON_SKIN", count = #SKINS,
+        items = LocalizedItems(SKINS, "SKIN_"),
+        get = getSkin, set = setSkin,
+    })), 4)
     AddSlider(page, "size", "ICON_SIZE", 14, 64, 12)
     AddSlider(page, "spacing", "SPACING", 0, 16)
     AddSlider(page, "perRow", "PER_ROW", 1, 12)
