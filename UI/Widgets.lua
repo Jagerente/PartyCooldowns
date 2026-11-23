@@ -91,6 +91,25 @@ local function HideHint(owner)
     if GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
 end
 
+function Widgets.DragHandle(handle, start, stop)
+    local dragging = false
+    local function Stop()
+        if not dragging then return end
+        dragging = false
+        stop()
+    end
+    handle:HookScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        start()
+        dragging = true
+        HideHint(self)
+    end)
+    handle:HookScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then Stop() end
+    end)
+    handle:HookScript("OnHide", Stop)
+end
+
 function Widgets.Heading(parent, width, key)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(width, 22)
@@ -100,10 +119,10 @@ function Widgets.Heading(parent, width, key)
     return frame
 end
 
-function Widgets.Paragraph(parent, width, key, size)
+function Widgets.Paragraph(parent, width, key)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetWidth(width)
-    local text = UI.Text(frame, size or T.label, C.muted)
+    local text = UI.Text(frame, T.label, C.muted)
     text:SetPoint("TOPLEFT")
     text:SetWidth(width)
     text:SetWordWrap(true)
@@ -467,7 +486,6 @@ function Widgets.AnchorPicker(parent, width, height, opts)
     local stage = CreateFrame("Frame", nil, frame)
     stage:SetPoint("TOPLEFT")
     stage:SetPoint("BOTTOMRIGHT", 0, PICKER_CAPTION_HEIGHT)
-    UI.Fill(stage, { 1, 1, 1, 0.025 })
 
     local block = CreateFrame("Frame", nil, stage)
     block:SetSize(BLOCK_WIDTH, BLOCK_HEIGHT)
@@ -522,12 +540,8 @@ function Widgets.AnchorPicker(parent, width, height, opts)
                 self.dot:SetColorTexture(unpack(C.text))
                 self.dot:SetAlpha(1)
             end
-            ShowHint(self, opts.hint)
         end)
-        handle:SetScript("OnLeave", function(self)
-            HideHint(self)
-            Paint()
-        end)
+        handle:SetScript("OnLeave", Paint)
         handles[index] = handle
     end
 
@@ -654,8 +668,6 @@ function Widgets.TextInput(parent, opts)
     box:SetScript("OnEnterPressed", function(self)
         opts.onSubmit(self:GetText())
     end)
-    box:HookScript("OnEnter", function(self) ShowHint(self, opts.hint) end)
-    box:HookScript("OnLeave", HideHint)
     Paint()
     return box
 end

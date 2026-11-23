@@ -1,6 +1,7 @@
 local _, ns = ...
 
 local L = ns.L
+local MUTED = ns.UI.COLORS.muted
 
 local MinimapButton = {}
 ns.MinimapButton = MinimapButton
@@ -66,7 +67,7 @@ local function ShowTooltip(self)
     GameTooltip:SetText(ns.TITLE, 1, 1, 1)
     GameTooltip:AddLine(L.MINIMAP_LEFT_CLICK, 0.9, 0.9, 0.9)
     GameTooltip:AddLine(L.MINIMAP_RIGHT_CLICK, 0.9, 0.9, 0.9)
-    GameTooltip:AddLine(L.MINIMAP_DRAG, 0.6, 0.6, 0.6)
+    GameTooltip:AddLine(L.MINIMAP_DRAG, MUTED[1], MUTED[2], MUTED[3])
     GameTooltip:Show()
 end
 

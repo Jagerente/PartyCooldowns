@@ -53,9 +53,7 @@ local function CreateMockColumn()
     column:SetMovable(true)
     column:SetClampedToScreen(true)
     column:EnableMouse(true)
-    column:RegisterForDrag("LeftButton")
-    column:SetScript("OnDragStart", column.StartMoving)
-    column:SetScript("OnDragStop", column.StopMovingOrSizing)
+    ns.Widgets.DragHandle(column, function() column:StartMoving() end, function() column:StopMovingOrSizing() end)
     column.hint = UI.Text(column, 11, UI.COLORS.muted)
     column.hint:SetPoint("BOTTOMLEFT", column, "TOPLEFT", 0, 8)
     column.frames = {}
@@ -71,15 +69,20 @@ local function PlaceMockColumn()
     mockColumn:SetPoint("LEFT", UIParent, "LEFT", 220, 60)
 end
 
+local function PreviewName(entry)
+    return entry.unit == "player" and L.PREVIEW_YOU or UI.ClassName(entry.class)
+end
+
 local function PaintMocks()
     mockColumn.hint:SetText(L.PREVIEW_DRAG_HINT)
     for index, entry in ipairs(CAST) do
         local frame = mockColumn.frames[index]
         local r, g, b = UI.ClassColor(entry.class)
         frame.health:SetVertexColor(r * 0.55, g * 0.55, b * 0.55, 0.9)
-        frame.name:SetText(entry.unit == "player" and L.PREVIEW_YOU or (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[entry.class] or entry.class))
+        frame.name:SetText(PreviewName(entry))
         frame.unit = entry.unit
         mockMap[entry.unit] = frame
+        ns.Members.Get(FakeGUID(index)).name = PreviewName(entry)
     end
 end
 
@@ -100,7 +103,7 @@ local function SeedMember(index, entry)
     local member = ns.Members.Ensure(FakeGUID(index))
     member.class = entry.class
     member.race = nil
-    member.name = entry.unit == "player" and L.PREVIEW_YOU or entry.class
+    member.name = PreviewName(entry)
     member.unit = entry.unit
     member.synced = true
     member.version = 1

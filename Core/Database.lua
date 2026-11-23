@@ -53,10 +53,6 @@ ns.Listen("INIT", function()
     ns.Fire("DB_READY")
 end)
 
-function ns.Get(key)
-    return ns.db[key]
-end
-
 function ns.Set(key, value)
     if ns.db[key] == value then return end
     ns.db[key] = value

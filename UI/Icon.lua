@@ -7,13 +7,14 @@ local C = UI.COLORS
 local Icon = {}
 ns.Icon = Icon
 
-local abs, ceil, floor, max, format = math.abs, math.ceil, math.floor, math.max, string.format
+local ceil, floor, max, format = math.ceil, math.floor, math.max, string.format
 
 local TIP_GLYPH_HEIGHT = 14
 local TIP_GLYPH = UI.InlineGlyph(TIP_GLYPH_HEIGHT)
 local TIP_GAP = " "
 local SECONDS_PER_MINUTE = 60
-local MIN_DURATION_DIFFERENCE = 1
+local SCRIM_ALPHA = 0.85
+local TIMER_INSET = 1
 local TEXCOORD_INSET = 0.08
 local FLAT_SWIPE_ALPHA = 0.72
 local BLIZZARD_FRAME_ATLAS = "UI-HUD-ActionBar-IconFrame"
@@ -88,28 +89,23 @@ local function AddHeader(member)
     GameTooltip:AddDoubleLine(TIP_GLYPH .. " " .. ns.TITLE, member.name or "", C.accent[1], C.accent[2], C.accent[3], r, g, b)
 end
 
-local function AddStatus(member, key, remaining)
+local function AddFacts(member, remaining)
     if remaining > 0 then
-        AddRow(L.TIP_STATUS, format(L.TOOLTIP_COOLDOWN, ClockText(remaining)), C.muted, C.warn)
-    elseif member.synced or member.cds[key] then
-        AddRow(L.TIP_STATUS, L.TOOLTIP_READY, C.muted, C.good)
-    else
-        AddRow(L.TIP_STATUS, L.TOOLTIP_UNKNOWN, C.muted, C.faint)
+        AddRow(L.TIP_READY_IN, ClockText(remaining), C.muted, C.warn)
     end
-end
-
-local function AddOwnDuration(member, key)
-    local duration = member.durations[key]
-    if not duration or abs(duration - ns.Spells.Get(key).cd) < MIN_DURATION_DIFFERENCE then return end
-    AddRow(L.TIP_THEIR_COOLDOWN, ClockText(duration), C.muted, C.text)
+    if not member.synced then
+        GameTooltip:AddLine(L.SYNC_MEMBER_NONE, C.muted[1], C.muted[2], C.muted[3])
+    end
+    if remaining > 0 or not member.synced then
+        GameTooltip:AddLine(TIP_GAP)
+    end
 end
 
 local function AddHints(member, key)
-    GameTooltip:AddLine(TIP_GAP)
     if ns.Ask.IsAvailable(member, key) then
-        AddRow(L.TIP_LEFT_CLICK, L["TIP_ASK_" .. ns.db.askChannel], C.muted, C.muted)
+        AddRow(L.TIP_LEFT_CLICK, L["TIP_ASK_" .. ns.db.askChannel], C.accent, C.text)
     end
-    AddRow(L.TIP_RIGHT_CLICK, L.TIP_SETTINGS, C.muted, C.muted)
+    AddRow(L.TIP_RIGHT_CLICK, L.TIP_SETTINGS, C.accent, C.text)
 end
 
 local function ShowTooltip(button)
@@ -121,11 +117,7 @@ local function ShowTooltip(button)
     GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
     GameTooltip:SetSpellByID(key)
     AddHeader(member)
-    AddStatus(member, key, remaining)
-    AddOwnDuration(member, key)
-    if not member.synced then
-        GameTooltip:AddLine(L.TOOLTIP_NO_SYNC, C.muted[1], C.muted[2], C.muted[3], true)
-    end
+    AddFacts(member, remaining)
     AddHints(member, key)
     GameTooltip:Show()
 end
@@ -147,6 +139,18 @@ local function OnClick(button, mouseButton)
     elseif button.key and ns.Ask.Request(button.member, button.key) then
         button.flash:Restart()
     end
+end
+
+local function CreateTimer(button, overlay)
+    local scrim = overlay:CreateTexture(nil, "BACKGROUND")
+    scrim:SetColorTexture(1, 1, 1, 1)
+    scrim:SetGradient("VERTICAL", CreateColor(0, 0, 0, SCRIM_ALPHA), CreateColor(0, 0, 0, 0))
+    scrim:SetPoint("TOPLEFT", button.cooldown, "LEFT")
+    scrim:SetPoint("BOTTOMRIGHT", button.cooldown)
+    scrim:Hide()
+    button.scrim = scrim
+    button.timer = overlay:CreateFontString(nil, "OVERLAY")
+    button.timer:SetPoint("BOTTOM", button.cooldown, "BOTTOM", 0, TIMER_INSET)
 end
 
 function Icon.Create(parent)
@@ -178,9 +182,7 @@ function Icon.Create(parent)
     button.frame:SetAtlas(BLIZZARD_FRAME_ATLAS)
     button.frame:SetPoint("TOPLEFT")
 
-    button.timer = overlay:CreateFontString(nil, "OVERLAY")
-    button.timer:SetPoint("CENTER", 1, 0)
-
+    CreateTimer(button, overlay)
     CreatePulse(button)
     button:SetScript("OnEnter", ShowTooltip)
     button:SetScript("OnLeave", HideTooltip)
@@ -268,11 +270,16 @@ local function SetTimerColor(button, urgent)
     button.timer:SetTextColor(unpack(urgent and UI.COLORS.warn or UI.COLORS.text))
 end
 
+local function ClearTimer(button)
+    button.bucket = nil
+    button.timer:SetText("")
+    button.scrim:Hide()
+end
+
 local function SetReady(button, unknown)
     button.active = false
-    button.bucket = nil
+    ClearTimer(button)
     button.cooldown:Clear()
-    button.timer:SetText("")
     button.icon:SetDesaturated(unknown)
     button:SetAlpha(unknown and UNKNOWN_ALPHA or 1)
 end
@@ -322,10 +329,7 @@ function Icon.Tick(button, now)
     end
     RefreshTooltip(button, remaining)
     if not ns.db.timerText then
-        if button.bucket then
-            button.timer:SetText("")
-            button.bucket = nil
-        end
+        if button.bucket then ClearTimer(button) end
         return true
     end
     local decimals = ns.db.timerDecimals
@@ -333,6 +337,7 @@ function Icon.Tick(button, now)
     if bucket ~= button.bucket then
         button.bucket = bucket
         button.timer:SetText(FormatRemaining(remaining, decimals))
+        button.scrim:Show()
         SetTimerColor(button, remaining < URGENT_SECONDS)
     end
     return true

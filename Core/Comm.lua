@@ -49,6 +49,12 @@ local function IsLockedDown()
 end
 Comm.IsLockedDown = IsLockedDown
 
+local function SetBlocked(value)
+    if blocked == value then return end
+    blocked = value
+    ns.Fire("COMM_BLOCK_CHANGED")
+end
+
 local function Refill()
     local now = GetTime()
     tokens = math.min(MAX_TOKENS, tokens + (now - refilledAt) * REFILL_PER_SECOND)
@@ -131,7 +137,7 @@ local function SendNext(kind, key)
     end
     local outcome = Send(message)
     if outcome == "locked" then
-        blocked = true
+        SetBlocked(true)
         return false
     elseif outcome == "retry" then
         QueueFlush(RETRY_DELAY)
@@ -148,10 +154,10 @@ function Comm.Flush()
         return
     end
     if IsLockedDown() then
-        blocked = true
+        SetBlocked(true)
         return
     end
-    blocked = false
+    SetBlocked(false)
     Refill()
     while true do
         local kind, key = NextMessage()
@@ -177,11 +183,6 @@ end
 
 function Comm.QueueWatch()
     pending.watch = true
-    QueueFlush()
-end
-
-function Comm.QueueState()
-    pending.state = true
     QueueFlush()
 end
 
@@ -327,9 +328,9 @@ ns.Listen("ROSTER_CHANGED", GreetNewMembers)
 ns.RegisterEvent("CHAT_MSG_ADDON", OnMessage)
 
 ns.RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED", function(restriction, state)
-    if restriction == RESTRICTION_CHAT and state == RESTRICTION_INACTIVE then
-        RetryIfBlocked()
-    end
+    if restriction ~= RESTRICTION_CHAT then return end
+    ns.Fire("COMM_BLOCK_CHANGED")
+    if state == RESTRICTION_INACTIVE then RetryIfBlocked() end
 end)
 
 ns.RegisterEvent("PLAYER_REGEN_ENABLED", RetryIfBlocked)

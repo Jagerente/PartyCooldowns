@@ -13,13 +13,16 @@ local WIDTH, HEIGHT = 380, 560
 local MARGIN = 14
 local HEADER_HEIGHT, TABS_HEIGHT, BODY_GAP = 38, 26, 10
 local HEADER_GLYPH_HEIGHT, HEADER_GLYPH_GAP = 16, 8
-local SETTINGS_GLYPH_HEIGHT = 20
+local SETTINGS_PANEL_INSET = 16
 local TAB_PAD, TAB_GAP = 8, 6
 local PAGE_WIDTH = WIDTH - MARGIN * 2
 local CONTENT_INSET = 8
 local SECTION_GAP = 10
-local PICKER_HEIGHT = 150
-local SLIDER_GAP = 8
+local CONTROL_GAP = 8
+local COLUMN_GAP = 12
+local TOGGLE_COLUMNS = 2
+local TOGGLE_HEIGHT, SLIDER_HEIGHT = 24, 34
+local PICKER_HEIGHT = 128
 local SPELL_ROW_HEIGHT = 26
 local GROUP_HEADER_HEIGHT = 20
 local REMOVE_BUTTON_SIZE = 20
@@ -27,7 +30,7 @@ local CUSTOM_INPUT_HEIGHT = 22
 local CUSTOM_GAP = 4
 local CLASS_TAB_GAP, CLASS_TAB_BAR_SPACE = 6, 6
 local MEMBER_ROW_HEIGHT = 24
-local STATUS_INTERVAL = 1
+local PARTY_SLOTS = 4
 local RESET_CONFIRM_SECONDS = 3
 local RACIAL_TAB = "RACIAL"
 local SKINS = { "flat", "blizzard" }
@@ -50,14 +53,43 @@ local function Track(page, widget)
     return widget
 end
 
-local function AddToggle(page, key, label, desc)
+local function NewToggle(page, parent, width, key, label, desc)
     local get, set = Setting(key)
-    return page.stack:Add(Track(page, W.Toggle(page.content, PAGE_WIDTH, { label = label, desc = desc, get = get, set = set })))
+    return Track(page, W.Toggle(parent, width, { label = label, desc = desc, get = get, set = set }))
 end
 
-local function NewSlider(page, parent, width, key, label, min, max)
-    local get, set = Setting(key)
-    return Track(page, W.Slider(parent, width, { label = label, min = min, max = max, step = 1, get = get, set = set }))
+local function AddToggle(page, key, label, desc)
+    return page.stack:Add(NewToggle(page, page.content, PAGE_WIDTH, key, label, desc))
+end
+
+local function NewSlider(page, parent, width, spec)
+    local get, set = Setting(spec.key)
+    return Track(page, W.Slider(parent, width, { label = spec.label, min = spec.min, max = spec.max, step = 1, get = get, set = set }))
+end
+
+local function AddColumns(page, height, gap, columns, specs, create)
+    local row = CreateFrame("Frame", nil, page.content)
+    row:SetSize(PAGE_WIDTH, height)
+    page.stack:Add(row, gap)
+    local width = (PAGE_WIDTH - COLUMN_GAP * (columns - 1)) / columns
+    local widgets = {}
+    for index, spec in ipairs(specs) do
+        widgets[index] = create(page, row, width, spec)
+        widgets[index]:SetPoint("TOPLEFT", (index - 1) * (width + COLUMN_GAP), 0)
+    end
+    return widgets
+end
+
+local function AddSliders(page, gap, specs)
+    return AddColumns(page, SLIDER_HEIGHT, gap, #specs, specs, NewSlider)
+end
+
+local function NewColumnToggle(page, row, width, spec)
+    return NewToggle(page, row, width, spec.key, spec.label)
+end
+
+local function AddToggleRow(page, specs)
+    return AddColumns(page, TOGGLE_HEIGHT, 0, TOGGLE_COLUMNS, specs, NewColumnToggle)
 end
 
 local function AddHeading(page, key)
@@ -74,20 +106,42 @@ local function LocalizedItems(values, prefix)
     end
 end
 
+local function AddSegmented(page, key, label, values, prefix, gap)
+    local get, set = Setting(key)
+    return page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
+        label = label, count = #values,
+        items = LocalizedItems(values, prefix),
+        get = get, set = set,
+    })), gap)
+end
+
 local function NewPage(id)
     local scroll = W.Scroll(window.body)
     scroll:SetAllPoints(window.body)
     scroll:Hide()
-    local page = { id = id, scroll = scroll, content = scroll.content, widgets = {} }
+    local page = { id = id, scroll = scroll, content = scroll.content, widgets = {}, dependents = {} }
     page.stack = W.Stack(page.content, CONTENT_INSET)
     pages[id] = page
     return page
+end
+
+local function ShowWhile(page, key, widget)
+    page.dependents[#page.dependents + 1] = { key = key, widget = widget }
+end
+
+local function PaintDependents(page)
+    if #page.dependents == 0 then return end
+    for _, entry in ipairs(page.dependents) do
+        entry.widget:SetShown(ns.db[entry.key])
+    end
+    page.stack:Reflow()
 end
 
 local function RefreshPage(page)
     for _, widget in ipairs(page.widgets) do
         widget:Refresh()
     end
+    PaintDependents(page)
     if page.OnShow then page:OnShow() end
 end
 
@@ -114,52 +168,27 @@ local function AddResetButton(page)
     page.stack:Add(button, 16)
 end
 
-local function AddAskSection(page)
-    AddHeading(page, "SECTION_ASK")
-    AddToggle(page, "askOnClick", "ASK_ON_CLICK", "ASK_ON_CLICK_DESC")
-    local getChannel, setChannel = Setting("askChannel")
-    local channel = page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
-        label = "ASK_CHANNEL", count = #ASK_CHANNELS,
-        items = LocalizedItems(ASK_CHANNELS, "ASK_CHANNEL_"),
-        get = getChannel, set = setChannel,
-    })), 4)
-    function page:OnShow()
-        channel:SetShown(ns.db.askOnClick)
-        self.stack:Reflow()
-    end
-    ns.Listen("SETTING_CHANGED", function(key)
-        if key == "askOnClick" or key == nil then page:OnShow() end
-    end)
-end
-
 local function BuildGeneral()
     local page = NewPage("general")
-    AddHeading(page, "SECTION_BEHAVIOR")
-    AddToggle(page, "enabled", "ENABLE", "ENABLE_DESC")
+    AddHeading(page, "SECTION_TRACKING")
+    AddToggle(page, "enabled", "ENABLE")
     AddToggle(page, "showSelf", "SHOW_SELF", "SHOW_SELF_DESC")
     AddToggle(page, "showUnsynced", "SHOW_UNSYNCED", "SHOW_UNSYNCED_DESC")
-    AddToggle(page, "hideReady", "HIDE_READY", "HIDE_READY_DESC")
-    AddToggle(page, "tooltips", "TOOLTIPS", "TOOLTIPS_DESC")
+    AddToggle(page, "hideReady", "HIDE_READY")
+
+    AddHeading(page, "SECTION_ASK")
+    AddToggle(page, "askOnClick", "ASK_ON_CLICK", "ASK_ON_CLICK_DESC")
+    ShowWhile(page, "askOnClick", AddSegmented(page, "askChannel", "ASK_CHANNEL", ASK_CHANNELS, "ASK_CHANNEL_", 4))
+
+    AddHeading(page, "SECTION_OTHER")
+    AddToggle(page, "tooltips", "TOOLTIPS")
     page.stack:Add(Track(page, W.Toggle(page.content, PAGE_WIDTH, {
-        label = "MINIMAP_BUTTON", desc = "MINIMAP_BUTTON_DESC",
+        label = "MINIMAP_BUTTON",
         get = function() return not ns.db.minimap.hide end,
         set = ns.MinimapButton.SetShown,
     })))
-
-    local getProvider, setProvider = Setting("provider")
-    page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
-        label = "SECTION_FRAMES", count = #ns.Anchors.PROVIDER_ORDER,
-        items = LocalizedItems(ns.Anchors.PROVIDER_ORDER, "PROVIDER_"),
-        get = getProvider, set = setProvider,
-    })), SECTION_GAP)
-
-    local getLocale, setLocale = Setting("locale")
-    page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
-        label = "LANGUAGE", count = #ns.LANGUAGES,
-        items = LocalizedItems(ns.LANGUAGES, "LANGUAGE_"),
-        get = getLocale, set = setLocale,
-    })), 8)
-    AddAskSection(page)
+    AddSegmented(page, "provider", "SECTION_FRAMES", ns.Anchors.PROVIDER_ORDER, "PROVIDER_", CONTROL_GAP)
+    AddSegmented(page, "locale", "LANGUAGE", ns.LANGUAGES, "LANGUAGE_", CONTROL_GAP)
     AddResetButton(page)
 end
 
@@ -197,10 +226,6 @@ local function DescribeAnchor(side, align)
     return L["SIDE_" .. side] .. ", " .. L[alignKey]
 end
 
-local function AddSlider(page, key, label, min, max, gap)
-    return page.stack:Add(NewSlider(page, page.content, PAGE_WIDTH, key, label, min, max), gap or SLIDER_GAP)
-end
-
 local function BuildDisplay()
     local page = NewPage("display")
     AddHeading(page, "SECTION_POSITION")
@@ -208,29 +233,29 @@ local function BuildDisplay()
         get = function() return ns.db.side, ns.db.align end,
         set = ChangeAnchor,
         describe = DescribeAnchor,
-        hint = "PICKER_HINT",
     })), 4)
-    AddSlider(page, "offsetX", "OFFSET_X", -150, 150, 12)
-    AddSlider(page, "offsetY", "OFFSET_Y", -150, 150)
+    AddSliders(page, CONTROL_GAP, { { key = "offsetX", label = "OFFSET_X", min = -150, max = 150 } })
+    AddSliders(page, CONTROL_GAP, { { key = "offsetY", label = "OFFSET_Y", min = -150, max = 150 } })
 
     AddHeading(page, "SECTION_ICONS")
-    local getSkin, setSkin = Setting("skin")
-    page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
-        label = "ICON_SKIN", count = #SKINS,
-        items = LocalizedItems(SKINS, "SKIN_"),
-        get = getSkin, set = setSkin,
-    })), 4)
-    AddSlider(page, "size", "ICON_SIZE", 14, 64, 12)
-    AddSlider(page, "spacing", "SPACING", 0, 16)
-    AddSlider(page, "perRow", "PER_ROW", 1, 12)
+    AddSegmented(page, "skin", "ICON_SKIN", SKINS, "SKIN_", 4)
+    AddSliders(page, CONTROL_GAP, {
+        { key = "size", label = "ICON_SIZE", min = 14, max = 64 },
+        { key = "spacing", label = "SPACING", min = 0, max = 16 },
+        { key = "perRow", label = "PER_ROW", min = 1, max = 12 },
+    })
 
     AddHeading(page, "SECTION_TIMER")
-    AddToggle(page, "timerText", "TIMER_TEXT", "TIMER_TEXT_DESC")
-    AddToggle(page, "timerDecimals", "TIMER_DECIMALS", "TIMER_DECIMALS_DESC")
-    AddHeading(page, "SECTION_STYLE")
-    AddToggle(page, "swipe", "SWIPE", "SWIPE_DESC")
-    AddToggle(page, "desaturate", "DESATURATE", "DESATURATE_DESC")
-    AddToggle(page, "pulse", "PULSE", "PULSE_DESC")
+    local timer = AddToggleRow(page, {
+        { key = "timerText", label = "TIMER_TEXT" },
+        { key = "timerDecimals", label = "TIMER_DECIMALS" },
+    })
+    ShowWhile(page, "timerText", timer[2])
+    AddToggleRow(page, {
+        { key = "swipe", label = "SWIPE" },
+        { key = "desaturate", label = "DESATURATE" },
+    })
+    AddToggleRow(page, { { key = "pulse", label = "PULSE" } })
 end
 
 local function RaceID(race, faction)
@@ -283,21 +308,13 @@ local function CreateRemoveButton(row)
     cross:SetPoint("CENTER", 0, 1)
     cross:SetText("×")
     button:SetScript("OnClick", function() ns.Custom.Remove(row.key) end)
-    button:SetScript("OnEnter", function(self)
-        cross:SetTextColor(unpack(C.bad))
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.CUSTOM_REMOVE, 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    button:SetScript("OnLeave", function(self)
-        cross:SetTextColor(unpack(C.muted))
-        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
-    end)
+    button:SetScript("OnEnter", function() cross:SetTextColor(unpack(C.bad)) end)
+    button:SetScript("OnLeave", function() cross:SetTextColor(unpack(C.muted)) end)
     button:Hide()
     return button
 end
 
-local function CreateSpellRow(parent, onToggle)
+local function CreateSpellRow(parent)
     local row = CreateFrame("Button", nil, parent)
     row:SetSize(PAGE_WIDTH, SPELL_ROW_HEIGHT)
     W.RowHover(row)
@@ -324,7 +341,6 @@ local function CreateSpellRow(parent, onToggle)
         ns.Spells.SetEnabled(self.key, enabled)
         W.SetSwitch(self.switch, enabled, true)
         self:Paint()
-        onToggle()
     end)
     row:HookScript("OnEnter", function(self)
         W.SetSwitchHover(self.switch, true)
@@ -359,7 +375,7 @@ end
 local function CreateGroupHeader(parent)
     local header = CreateFrame("Frame", nil, parent)
     header:SetSize(PAGE_WIDTH, GROUP_HEADER_HEIGHT)
-    header.text = UI.BoldText(header, T.label, C.faint)
+    header.text = UI.BoldText(header, T.label, C.accent)
     header.text:SetPoint("BOTTOMLEFT", 0, 4)
     return header
 end
@@ -473,7 +489,6 @@ local function CreateCustomInput(page)
     add:SetPoint("RIGHT")
     row.input = W.TextInput(row, {
         placeholder = "CUSTOM_PLACEHOLDER",
-        hint = "CUSTOM_PLACEHOLDER_DESC",
         onSubmit = Submit,
         onChange = function() page:ShowCustomHint() end,
     })
@@ -503,8 +518,6 @@ local function BuildSpells()
     page.stack:Add(titleRow, 10)
     page.title = UI.BoldText(titleRow, T.title, C.text)
     page.title:SetPoint("LEFT")
-    page.count = UI.Text(titleRow, T.label, C.faint)
-    page.count:SetPoint("LEFT", page.title, "RIGHT", 8, -1)
 
     page.stack:Add(W.ButtonGroup(page.content, {
         { key = "BTN_ENABLE_ALL", onClick = function()
@@ -541,15 +554,6 @@ local function BuildSpells()
         input:SetText("")
         input:ClearFocus()
         self:ShowCustomHint()
-    end
-
-    function page:PaintCount()
-        local keys = GroupKeys(self.tab)
-        local enabled = 0
-        for _, key in ipairs(keys) do
-            if ns.Spells.IsEnabled(key) then enabled = enabled + 1 end
-        end
-        self.count:SetText(enabled .. " / " .. #keys)
     end
 
     local function Append(frame, gap)
@@ -593,13 +597,12 @@ local function BuildSpells()
             end
             for _, key in ipairs(group.keys) do
                 rowIndex = rowIndex + 1
-                local row = self.rows[rowIndex] or CreateSpellRow(self.content, function() page:PaintCount() end)
+                local row = self.rows[rowIndex] or CreateSpellRow(self.content)
                 self.rows[rowIndex] = row
                 row:SetSpell(key, group.custom == true)
                 Append(row, 0)
             end
         end
-        self:PaintCount()
         self.stack:Reflow()
         if not keepScroll then
             self.scroll:ScrollTo(0, false)
@@ -625,107 +628,57 @@ end
 local function CreateMemberRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(PAGE_WIDTH, MEMBER_ROW_HEIGHT)
-    row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(16, 16)
-    row.icon:SetPoint("LEFT")
     row.name = UI.Text(row, T.body, C.text)
-    row.name:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+    row.name:SetPoint("LEFT")
     row.status = UI.Text(row, T.label, C.muted)
     row.status:SetPoint("RIGHT")
     return row
 end
 
-local function CountKnown(member)
-    local count = 0
-    for _ in pairs(member.known) do count = count + 1 end
-    return count
+local function PartyMember(index)
+    local guid = ns.Roster.InParty() and ns.Roster.GUID("party" .. index)
+    local member = guid and ns.Members.Get(guid)
+    return member and member.class and member or nil
+end
+
+local function PaintMember(row, member)
+    row.name:SetText(member.name or "?")
+    row.name:SetTextColor(UI.ClassColor(member.class))
+    row.status:SetText(member.synced and L.SYNC_MEMBER_SYNCED or L.SYNC_MEMBER_NONE)
+    row.status:SetTextColor(unpack(member.synced and C.good or C.muted))
 end
 
 local function BuildSync()
     local page = NewPage("sync")
-    page.stack:Add(W.Paragraph(page.content, PAGE_WIDTH, "SYNC_EXPLAIN"), 4)
-
-    local status = CreateFrame("Frame", nil, page.content)
-    status:SetSize(PAGE_WIDTH, 24)
-    page.stack:Add(status, 14)
-    local statusDot = W.Circle(status, "ARTWORK")
-    statusDot:SetSize(7, 7)
-    statusDot:SetPoint("LEFT", 0, 0)
-    local resync = W.Button(status, "SYNC_REQUEST", function() ns.Comm.RequestSync() end)
-    resync:SetPoint("RIGHT")
-    local statusText = UI.Text(status, T.body, C.text)
-    statusText:SetPoint("LEFT", statusDot, "RIGHT", 8, 0)
-    statusText:SetPoint("RIGHT", resync, "LEFT", -12, 0)
-    statusText:SetJustifyH("LEFT")
-
-    AddHeading(page, "SYNC_MEMBERS")
-    local empty = W.Paragraph(page.content, PAGE_WIDTH, "SYNC_NO_MEMBERS")
-    page.stack:Add(empty)
+    local solo = page.stack:Add(W.Paragraph(page.content, PAGE_WIDTH, "SYNC_STATUS_SOLO"))
     local rows = {}
-    for index = 1, 4 do
+    for index = 1, PARTY_SLOTS do
         rows[index] = page.stack:Add(CreateMemberRow(page.content))
     end
-
-    local function PaintStatus()
-        local color, text
-        if not ns.Roster.InParty() then
-            color, text = C.faint, L.SYNC_STATUS_SOLO
-        elseif ns.Comm.IsBlocked() then
-            color, text = C.warn, L.SYNC_STATUS_LOCKED
-        else
-            color, text = C.good, L.SYNC_STATUS_OK
-        end
-        statusDot:SetVertexColor(unpack(color))
-        statusText:SetText(text)
-    end
-
-    local function PaintMembers()
-        local shown = 0
-        for index = 1, 4 do
-            local guid = ns.Roster.InParty() and ns.Roster.GUID("party" .. index)
-            local member = guid and ns.Members.Get(guid)
-            local row = rows[index]
-            if member and member.class then
-                shown = shown + 1
-                UI.SetClassIcon(row.icon, member.class)
-                row.name:SetText(member.name or "?")
-                row.name:SetTextColor(UI.ClassColor(member.class))
-                if member.synced then
-                    row.status:SetText(string.format(L.SYNC_MEMBER_SYNCED, CountKnown(member)))
-                    row.status:SetTextColor(unpack(C.good))
-                else
-                    row.status:SetText(L.SYNC_MEMBER_NONE)
-                    row.status:SetTextColor(unpack(C.faint))
-                end
-                row:Show()
-            else
-                row:Hide()
-            end
-        end
-        empty:SetShown(shown == 0)
-        page.stack:Reflow()
-    end
+    local paused = page.stack:Add(W.Paragraph(page.content, PAGE_WIDTH, "SYNC_STATUS_LOCKED"), CONTROL_GAP)
+    paused.text:SetTextColor(unpack(C.warn))
+    local resync = page.stack:Add(W.Button(page.content, "SYNC_REQUEST", function() ns.Comm.RequestSync() end), SECTION_GAP)
 
     function page:OnShow()
-        PaintStatus()
-        PaintMembers()
+        local inParty = ns.Roster.InParty()
+        for index, row in ipairs(rows) do
+            local member = PartyMember(index)
+            row:SetShown(member ~= nil)
+            if member then PaintMember(row, member) end
+        end
+        solo:SetShown(not inParty)
+        paused:SetShown(inParty and ns.Comm.IsBlocked())
+        resync:SetShown(inParty)
+        self.stack:Reflow()
     end
 
-    local elapsed = 0
-    page.scroll:SetScript("OnUpdate", function(_, delta)
-        elapsed = elapsed + delta
-        if elapsed < STATUS_INTERVAL then return end
-        elapsed = 0
-        PaintStatus()
-    end)
     local function RepaintIfVisible()
-        if currentPage == page and window:IsShown() then PaintMembers() end
+        if currentPage == page and window:IsShown() then page:OnShow() end
     end
     ns.Listen("MEMBER_CHANGED", RepaintIfVisible)
     ns.Listen("ROSTER_CHANGED", RepaintIfVisible)
-    W.AfterLocale(function()
-        if currentPage == page then page:OnShow() end
-    end)
+    ns.Listen("COMM_BLOCK_CHANGED", RepaintIfVisible)
+    W.AfterLocale(RepaintIfVisible)
 end
 
 local function BuildAbout()
@@ -860,17 +813,13 @@ local function CreatePreviewToggle(header)
         previewStartedHere = not ns.TestMode.active
         ns.TestMode.Toggle()
     end)
-    toggle:SetScript("OnEnter", function(self)
+    toggle:SetScript("OnEnter", function()
         label:SetTextColor(unpack(C.text))
         W.SetSwitchHover(switch, true)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText(L.PREVIEW_DESC, 1, 1, 1, 1, true)
-        GameTooltip:Show()
     end)
     toggle:SetScript("OnLeave", function()
         label:SetTextColor(unpack(C.muted))
         W.SetSwitchHover(switch, false)
-        GameTooltip:Hide()
     end)
     ns.Listen("TEST_MODE_CHANGED", function(active) W.SetSwitch(switch, active, true) end)
     W.SetSwitch(switch, ns.TestMode.active, false)
@@ -883,9 +832,7 @@ local function CreateHeader()
     header:SetPoint("TOPRIGHT")
     header:SetHeight(HEADER_HEIGHT)
     header:EnableMouse(true)
-    header:RegisterForDrag("LeftButton")
-    header:SetScript("OnDragStart", function() window:StartMoving() end)
-    header:SetScript("OnDragStop", function() window:StopMovingOrSizing() end)
+    W.DragHandle(header, function() window:StartMoving() end, function() window:StopMovingOrSizing() end)
 
     local glyph = UI.AddonGlyph(header, HEADER_GLYPH_HEIGHT)
     glyph:SetPoint("LEFT", MARGIN, -2)
@@ -997,6 +944,7 @@ ns.Listen("SETTING_CHANGED", function(key)
         for _, widget in ipairs(currentPage.widgets) do
             widget:Refresh()
         end
+        PaintDependents(currentPage)
     end
 end)
 
@@ -1004,16 +952,8 @@ local function RegisterSettingsCategory()
     if not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     local panel = CreateFrame("Frame")
     panel:Hide()
-    local glyph = UI.AddonGlyph(panel, SETTINGS_GLYPH_HEIGHT)
-    glyph:SetPoint("TOPLEFT", 16, -16)
-    local title = UI.Text(panel, 20, C.text)
-    title:SetPoint("LEFT", glyph, "RIGHT", HEADER_GLYPH_GAP, 0)
-    title:SetText(ns.TITLE)
-    local desc = UI.Text(panel, T.body, C.muted)
-    desc:SetPoint("TOPLEFT", glyph, "BOTTOMLEFT", 0, -10)
-    W.Bind(desc, "SETTINGS_DESC")
     local open = W.Button(panel, "SETTINGS_OPEN", function() Options.Open() end, "primary")
-    open:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
+    open:SetPoint("TOPLEFT", SETTINGS_PANEL_INSET, -SETTINGS_PANEL_INSET)
     local category = Settings.RegisterCanvasLayoutCategory(panel, ns.TITLE)
     Settings.RegisterAddOnCategory(category)
 end
