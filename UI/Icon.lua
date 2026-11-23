@@ -23,7 +23,8 @@ local BLIZZARD_BUTTON_SIZE, BLIZZARD_FRAME_WIDTH, BLIZZARD_COOLDOWN_INSET = 45, 
 local BLIZZARD_MASK_SIZE = 64
 local BLIZZARD_SWIPE_ALPHA = 0.64
 local URGENT_SECONDS = 5
-local PULSE_SCALE = 1.22
+local PULSE_SCALE, PULSE_ALPHA, PULSE_TIME = 1.35, 0.6, 0.4
+local PULSE_SUBLEVEL = 7
 local UNKNOWN_ALPHA = 0.45
 local MIN_FONT, FONT_RATIO = 9, 0.42
 
@@ -42,19 +43,23 @@ local function FormatRemaining(remaining, decimals)
 end
 
 local function CreatePulse(button)
-    local group = button:CreateAnimationGroup()
+    local ghost = button.overlay:CreateTexture(nil, "OVERLAY", nil, PULSE_SUBLEVEL)
+    ghost:SetAllPoints(button.cooldown)
+    ghost:SetTexCoord(TEXCOORD_INSET, 1 - TEXCOORD_INSET, TEXCOORD_INSET, 1 - TEXCOORD_INSET)
+    ghost:SetBlendMode("ADD")
+    ghost:SetAlpha(0)
+    button.ghost = ghost
+    local group = ghost:CreateAnimationGroup()
     local grow = group:CreateAnimation("Scale")
-    grow:SetOrder(1)
-    grow:SetDuration(0.12)
+    grow:SetDuration(PULSE_TIME)
     grow:SetScaleFrom(1, 1)
     grow:SetScaleTo(PULSE_SCALE, PULSE_SCALE)
     grow:SetSmoothing("OUT")
-    local settle = group:CreateAnimation("Scale")
-    settle:SetOrder(2)
-    settle:SetDuration(0.25)
-    settle:SetScaleFrom(PULSE_SCALE, PULSE_SCALE)
-    settle:SetScaleTo(1, 1)
-    settle:SetSmoothing("IN_OUT")
+    local vanish = group:CreateAnimation("Alpha")
+    vanish:SetDuration(PULSE_TIME)
+    vanish:SetFromAlpha(PULSE_ALPHA)
+    vanish:SetToAlpha(0)
+    vanish:SetSmoothing("OUT")
     button.pulse = group
 
     local flash = button.overlay:CreateTexture(nil, "OVERLAY")
@@ -298,7 +303,9 @@ function Icon.Assign(button, key, member, now)
     button.key = key
     button.member = member
     if button.shownKey ~= key then
-        button.icon:SetTexture(ns.Spells.Icon(key))
+        local texture = ns.Spells.Icon(key)
+        button.icon:SetTexture(texture)
+        button.ghost:SetTexture(texture)
         button.shownKey = key
         button.cdStart, button.cdDuration = nil, nil
     end
