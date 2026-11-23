@@ -21,6 +21,8 @@ local DEFAULTS = {
     desaturate = true,
     pulse = true,
     skin = "flat",
+    askOnClick = true,
+    askChannel = "party",
     minimap = { hide = false, angle = 200 },
     spells = {},
     custom = {},

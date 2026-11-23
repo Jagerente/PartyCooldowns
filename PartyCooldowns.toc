@@ -18,6 +18,7 @@ Core\Custom.lua
 Core\Roster.lua
 Core\Members.lua
 Core\Comm.lua
+Core\Ask.lua
 Core\Self.lua
 Core\PartyWatch.lua
 UI\Theme.lua

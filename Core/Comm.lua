@@ -41,11 +41,13 @@ local function Channel()
     if IsInGroup() then return "PARTY" end
     return nil
 end
+Comm.Channel = Channel
 
 local function IsLockedDown()
     local check = C_ChatInfo.InChatMessagingLockdown
     return check ~= nil and check() == true
 end
+Comm.IsLockedDown = IsLockedDown
 
 local function Refill()
     local now = GetTime()

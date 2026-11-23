@@ -20,6 +20,12 @@ Open the Spells tab, pick the class and type the spell ID into the field under *
 
 A custom spell shows up for party members who have an up-to-date Party Cooldowns and know the spell. Their addon learns the list from yours, so they don't have to add the spell themselves. The timer comes from their game after the first cast. Players without the addon never show custom spells, because Forever hides their casts.
 
+## Asking for a cooldown
+
+Click a ready icon and the addon asks that player to use the spell: "Tanky, please use Shield Wall". It goes to party chat by default. On the General tab you can switch it to a whisper or turn it off. Clicking the same icon again within 5 seconds does nothing, so a double click doesn't spam the chat.
+
+Forever can stop addons from writing to chat during some fights. When that happens nothing is sent and you see an error at the top of the screen.
+
 ## Party frames
 
 The icons attach to whatever party frames you use:

@@ -86,6 +86,9 @@ local function ShowTooltip(button)
     if not member.synced then
         GameTooltip:AddLine(L.TOOLTIP_NO_SYNC, 0.6, 0.63, 0.69, true)
     end
+    if ns.Ask.IsAvailable(member, button.key) then
+        GameTooltip:AddLine(L["TOOLTIP_ASK_" .. ns.db.askChannel], unpack(UI.COLORS.muted))
+    end
     GameTooltip:Show()
 end
 
@@ -93,8 +96,15 @@ local function HideTooltip(button)
     if GameTooltip:IsOwned(button) then GameTooltip:Hide() end
 end
 
+local function AskForSpell(button)
+    if button.key and ns.Ask.Request(button.member, button.key) then
+        button.flash:Restart()
+    end
+end
+
 function Icon.Create(parent)
-    local button = CreateFrame("Frame", nil, parent)
+    local button = CreateFrame("Button", nil, parent)
+    button:RegisterForClicks("LeftButtonUp")
     button.background = UI.Fill(button, { 0, 0, 0, 0.85 }, "BACKGROUND")
 
     local icon = button:CreateTexture(nil, "ARTWORK")
@@ -126,6 +136,7 @@ function Icon.Create(parent)
     CreatePulse(button)
     button:SetScript("OnEnter", ShowTooltip)
     button:SetScript("OnLeave", HideTooltip)
+    button:SetScript("OnClick", AskForSpell)
     return button
 end
 
@@ -200,10 +211,7 @@ function Icon.Configure(button, size)
     button:SetSize(size, size)
     ApplySkin(button, size, db.skin)
     button.cooldown:SetDrawSwipe(db.swipe)
-    button:EnableMouse(db.tooltips)
-    if button.SetMouseClickEnabled then
-        button:SetMouseClickEnabled(false)
-    end
+    button:SetMouseMotionEnabled(db.tooltips)
 end
 
 local function SetTimerColor(button, urgent)
@@ -219,12 +227,14 @@ local function SetReady(button, unknown)
     button.timer:SetText("")
     button.icon:SetDesaturated(unknown)
     button:SetAlpha(unknown and UNKNOWN_ALPHA or 1)
+    button:SetMouseClickEnabled(ns.Ask.IsAvailable(button.member, button.key))
 end
 
 local function SetActive(button, entry)
     button.active = true
     button.icon:SetDesaturated(ns.db.desaturate)
     button:SetAlpha(1)
+    button:SetMouseClickEnabled(false)
     if button.cdStart ~= entry.start or button.cdDuration ~= entry.duration then
         button.cdStart, button.cdDuration = entry.start, entry.duration
         button.cooldown:SetCooldown(entry.start, entry.duration)

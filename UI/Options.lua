@@ -31,6 +31,7 @@ local STATUS_INTERVAL = 1
 local RESET_CONFIRM_SECONDS = 3
 local RACIAL_TAB = "RACIAL"
 local SKINS = { "flat", "blizzard" }
+local ASK_CHANNELS = { "party", "whisper" }
 local TALENT_COLOR = CreateColor(unpack(C.talent))
 local RACE_TAG_COLOR = CreateColor(unpack(C.faint))
 
@@ -113,6 +114,24 @@ local function AddResetButton(page)
     page.stack:Add(button, 16)
 end
 
+local function AddAskSection(page)
+    AddHeading(page, "SECTION_ASK")
+    AddToggle(page, "askOnClick", "ASK_ON_CLICK", "ASK_ON_CLICK_DESC")
+    local getChannel, setChannel = Setting("askChannel")
+    local channel = page.stack:Add(Track(page, W.Segmented(page.content, PAGE_WIDTH, {
+        label = "ASK_CHANNEL", count = #ASK_CHANNELS,
+        items = LocalizedItems(ASK_CHANNELS, "ASK_CHANNEL_"),
+        get = getChannel, set = setChannel,
+    })), 4)
+    function page:OnShow()
+        channel:SetShown(ns.db.askOnClick)
+        self.stack:Reflow()
+    end
+    ns.Listen("SETTING_CHANGED", function(key)
+        if key == "askOnClick" or key == nil then page:OnShow() end
+    end)
+end
+
 local function BuildGeneral()
     local page = NewPage("general")
     AddHeading(page, "SECTION_BEHAVIOR")
@@ -140,6 +159,7 @@ local function BuildGeneral()
         items = LocalizedItems(ns.LANGUAGES, "LANGUAGE_"),
         get = getLocale, set = setLocale,
     })), 8)
+    AddAskSection(page)
     AddResetButton(page)
 end
 

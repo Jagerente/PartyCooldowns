@@ -18,6 +18,7 @@ function Members.Ensure(guid)
             known = {},
             durations = {},
             cds = {},
+            asked = {},
             synced = false,
         }
         records[guid] = member
