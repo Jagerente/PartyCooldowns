@@ -2,12 +2,18 @@ local _, ns = ...
 
 local UI = ns.UI
 local L = ns.L
+local C = UI.COLORS
 
 local Icon = {}
 ns.Icon = Icon
 
-local ceil, format = math.ceil, string.format
+local abs, ceil, floor, max, format = math.abs, math.ceil, math.floor, math.max, string.format
 
+local TIP_GLYPH_HEIGHT = 14
+local TIP_GLYPH = UI.InlineGlyph(TIP_GLYPH_HEIGHT)
+local TIP_GAP = " "
+local SECONDS_PER_MINUTE = 60
+local MIN_DURATION_DIFFERENCE = 1
 local TEXCOORD_INSET = 0.08
 local FLAT_SWIPE_ALPHA = 0.72
 local BLIZZARD_FRAME_ATLAS = "UI-HUD-ActionBar-IconFrame"
@@ -65,46 +71,88 @@ local function CreatePulse(button)
     button.flash = flashGroup
 end
 
-local function ShowTooltip(button)
-    if not button.key then return end
-    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-    GameTooltip:SetSpellByID(button.key)
-    local member = button.member
-    local remaining = ns.Members.Remaining(member, button.key)
-    GameTooltip:AddLine(" ")
+local hovered
+
+local function AddRow(left, right, leftColor, rightColor)
+    GameTooltip:AddDoubleLine(left, right, leftColor[1], leftColor[2], leftColor[3], rightColor[1], rightColor[2], rightColor[3])
+end
+
+local function ClockText(seconds)
+    local whole = ceil(seconds)
+    return format("%d:%02d", floor(whole / SECONDS_PER_MINUTE), whole % SECONDS_PER_MINUTE)
+end
+
+local function AddHeader(member)
+    GameTooltip:AddLine(TIP_GAP)
+    local r, g, b = UI.ClassColor(member.class)
+    GameTooltip:AddDoubleLine(TIP_GLYPH .. " " .. ns.TITLE, member.name or "", C.accent[1], C.accent[2], C.accent[3], r, g, b)
+end
+
+local function AddStatus(member, key, remaining)
     if remaining > 0 then
-        GameTooltip:AddLine(format(L.TOOLTIP_COOLDOWN, FormatRemaining(remaining, true)), unpack(UI.COLORS.warn))
-    elseif member.synced or member.cds[button.key] then
-        GameTooltip:AddLine(L.TOOLTIP_READY, unpack(UI.COLORS.good))
+        AddRow(L.TIP_STATUS, format(L.TOOLTIP_COOLDOWN, ClockText(remaining)), C.muted, C.warn)
+    elseif member.synced or member.cds[key] then
+        AddRow(L.TIP_STATUS, L.TOOLTIP_READY, C.muted, C.good)
     else
-        GameTooltip:AddLine(L.TOOLTIP_UNKNOWN, unpack(UI.COLORS.muted))
+        AddRow(L.TIP_STATUS, L.TOOLTIP_UNKNOWN, C.muted, C.faint)
     end
-    if member.name then
-        local r, g, b = UI.ClassColor(member.class)
-        GameTooltip:AddLine(member.name, r, g, b)
+end
+
+local function AddOwnDuration(member, key)
+    local duration = member.durations[key]
+    if not duration or abs(duration - ns.Spells.Get(key).cd) < MIN_DURATION_DIFFERENCE then return end
+    AddRow(L.TIP_THEIR_COOLDOWN, ClockText(duration), C.muted, C.text)
+end
+
+local function AddHints(member, key)
+    GameTooltip:AddLine(TIP_GAP)
+    if ns.Ask.IsAvailable(member, key) then
+        AddRow(L.TIP_LEFT_CLICK, L["TIP_ASK_" .. ns.db.askChannel], C.muted, C.muted)
     end
+    AddRow(L.TIP_RIGHT_CLICK, L.TIP_SETTINGS, C.muted, C.muted)
+end
+
+local function ShowTooltip(button)
+    local member, key = button.member, button.key
+    if not key then return end
+    local remaining = ns.Members.Remaining(member, key)
+    hovered = button
+    button.tipKey, button.tipSecond = key, ceil(max(remaining, 0))
+    GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+    GameTooltip:SetSpellByID(key)
+    AddHeader(member)
+    AddStatus(member, key, remaining)
+    AddOwnDuration(member, key)
     if not member.synced then
-        GameTooltip:AddLine(L.TOOLTIP_NO_SYNC, 0.6, 0.63, 0.69, true)
+        GameTooltip:AddLine(L.TOOLTIP_NO_SYNC, C.muted[1], C.muted[2], C.muted[3], true)
     end
-    if ns.Ask.IsAvailable(member, button.key) then
-        GameTooltip:AddLine(L["TOOLTIP_ASK_" .. ns.db.askChannel], unpack(UI.COLORS.muted))
-    end
+    AddHints(member, key)
     GameTooltip:Show()
 end
 
+local function RefreshTooltip(button, remaining)
+    if button ~= hovered or not GameTooltip:IsOwned(button) then return end
+    if button.tipKey == button.key and button.tipSecond == ceil(remaining) then return end
+    ShowTooltip(button)
+end
+
 local function HideTooltip(button)
+    hovered = nil
     if GameTooltip:IsOwned(button) then GameTooltip:Hide() end
 end
 
-local function AskForSpell(button)
-    if button.key and ns.Ask.Request(button.member, button.key) then
+local function OnClick(button, mouseButton)
+    if mouseButton == "RightButton" then
+        ns.Options.Toggle()
+    elseif button.key and ns.Ask.Request(button.member, button.key) then
         button.flash:Restart()
     end
 end
 
 function Icon.Create(parent)
     local button = CreateFrame("Button", nil, parent)
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:SetMouseClickEnabled(true)
     button.background = UI.Fill(button, { 0, 0, 0, 0.85 }, "BACKGROUND")
 
     local icon = button:CreateTexture(nil, "ARTWORK")
@@ -136,7 +184,7 @@ function Icon.Create(parent)
     CreatePulse(button)
     button:SetScript("OnEnter", ShowTooltip)
     button:SetScript("OnLeave", HideTooltip)
-    button:SetScript("OnClick", AskForSpell)
+    button:SetScript("OnClick", OnClick)
     return button
 end
 
@@ -227,14 +275,12 @@ local function SetReady(button, unknown)
     button.timer:SetText("")
     button.icon:SetDesaturated(unknown)
     button:SetAlpha(unknown and UNKNOWN_ALPHA or 1)
-    button:SetMouseClickEnabled(ns.Ask.IsAvailable(button.member, button.key))
 end
 
 local function SetActive(button, entry)
     button.active = true
     button.icon:SetDesaturated(ns.db.desaturate)
     button:SetAlpha(1)
-    button:SetMouseClickEnabled(false)
     if button.cdStart ~= entry.start or button.cdDuration ~= entry.duration then
         button.cdStart, button.cdDuration = entry.start, entry.duration
         button.cooldown:SetCooldown(entry.start, entry.duration)
@@ -257,6 +303,7 @@ function Icon.Assign(button, key, member, now)
     end
     button.cdStart, button.cdDuration = nil, nil
     SetReady(button, not member.synced)
+    RefreshTooltip(button, 0)
     return false
 end
 
@@ -266,12 +313,14 @@ function Icon.Tick(button, now)
     if remaining <= 0 then
         button.cdStart, button.cdDuration = nil, nil
         SetReady(button, false)
+        RefreshTooltip(button, 0)
         if ns.db.pulse and button:IsVisible() then
             button.pulse:Restart()
             button.flash:Restart()
         end
         return false
     end
+    RefreshTooltip(button, remaining)
     if not ns.db.timerText then
         if button.bucket then
             button.timer:SetText("")

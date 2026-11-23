@@ -48,7 +48,7 @@ The Sync tab in the settings shows who in your group has the addon.
 
 ## Settings
 
-Type `/pcd` or click the minimap button. In the settings you can change:
+Type `/pcd`, click the minimap button or right-click any cooldown icon. In the settings you can change:
 
 - which side of the frame the icons go on, and the offset
 - icon look: flat with a thin black border, or Blizzard with the same frame as your action buttons

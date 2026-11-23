@@ -279,6 +279,8 @@ UI.ADDON_ICON = "Interface\\AddOns\\" .. ns.ADDON .. "\\Media\\Icon"
 
 local GLYPH_LEFT, GLYPH_RIGHT, GLYPH_TOP, GLYPH_BOTTOM = 13 / 64, 51 / 64, 10 / 64, 54 / 64
 local GLYPH_ASPECT = (GLYPH_RIGHT - GLYPH_LEFT) / (GLYPH_BOTTOM - GLYPH_TOP)
+local ICON_PIXELS = 64
+local INLINE_TEXTURE = "|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t"
 
 function UI.AddonGlyph(parent, height, layer)
     local texture = parent:CreateTexture(nil, layer or "ARTWORK")
@@ -286,6 +288,11 @@ function UI.AddonGlyph(parent, height, layer)
     texture:SetTexCoord(GLYPH_LEFT, GLYPH_RIGHT, GLYPH_TOP, GLYPH_BOTTOM)
     texture:SetSize(height * GLYPH_ASPECT, height)
     return texture
+end
+
+function UI.InlineGlyph(height)
+    return string.format(INLINE_TEXTURE, UI.ADDON_ICON, height, math.floor(height * GLYPH_ASPECT + 0.5), ICON_PIXELS, ICON_PIXELS,
+        GLYPH_LEFT * ICON_PIXELS, GLYPH_RIGHT * ICON_PIXELS, GLYPH_TOP * ICON_PIXELS, GLYPH_BOTTOM * ICON_PIXELS)
 end
 
 local CLASS_ICON_FILE = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
