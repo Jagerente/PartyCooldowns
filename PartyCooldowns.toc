@@ -2,7 +2,7 @@
 ## Title: Party Cooldowns
 ## Notes: Tracks important party cooldowns right next to the party frames.
 ## Notes-ruRU: Отслеживает важные кулдауны группы рядом с пати-фреймами.
-## Version: 1.2.0
+## Version: 1.3.0
 ## IconTexture: Interface\AddOns\PartyCooldowns\Media\Icon
 ## SavedVariables: PartyCooldownsDB
 ## SavedVariablesPerCharacter: PartyCooldownsCharDB

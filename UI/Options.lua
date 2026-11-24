@@ -187,7 +187,6 @@ local function BuildGeneral()
         get = function() return not ns.db.minimap.hide end,
         set = ns.MinimapButton.SetShown,
     })))
-    AddSegmented(page, "provider", "SECTION_FRAMES", ns.Anchors.PROVIDER_ORDER, "PROVIDER_", CONTROL_GAP)
     AddSegmented(page, "locale", "LANGUAGE", ns.LANGUAGES, "LANGUAGE_", CONTROL_GAP)
     AddResetButton(page)
 end

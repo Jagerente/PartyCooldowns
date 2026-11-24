@@ -18,10 +18,7 @@ local function Matches(frame, unit)
     return frame ~= nil and frame:IsVisible() and FrameUnit(frame) == unit
 end
 
-local function FromEllesmere(unit)
-    local selfButton = _G.ERFPartySelfButton
-    if unit == "player" and Matches(selfButton, unit) then return selfButton end
-    local header = _G.ERFPartyHeader
+local function FromHeader(header, unit)
     if not header or not header:IsVisible() then return nil end
     local index = 1
     local child = header:GetAttribute("child1")
@@ -30,6 +27,21 @@ local function FromEllesmere(unit)
         index = index + 1
         child = header:GetAttribute("child" .. index)
     end
+end
+
+local function FromEllesmere(unit)
+    local selfButton = _G.ERFPartySelfButton
+    if unit == "player" and Matches(selfButton, unit) then return selfButton end
+    return FromHeader(_G.ERFPartyHeader, unit)
+end
+
+local function FromElvUI(unit)
+    local header = _G.ElvUF_PartyGroup1
+    if not header or not header:IsVisible() then return nil end
+    local child = FromHeader(header, unit)
+    if child then return child end
+    local playerFrame = _G.ElvUF_Player
+    if unit == "player" and Matches(playerFrame, unit) then return playerFrame end
 end
 
 local function FromCompact(unit)
@@ -50,33 +62,15 @@ local function FromBlizzard(unit)
     end
 end
 
-local PROVIDERS = {
-    ellesmere = FromEllesmere,
-    compact = FromCompact,
-    blizzard = FromBlizzard,
-}
-
-Anchors.PROVIDER_ORDER = { "auto", "ellesmere", "compact", "blizzard" }
-local AUTO_ORDER = { "ellesmere", "compact", "blizzard" }
-
-local function FindReal(unit)
-    local chosen = PROVIDERS[ns.db.provider]
-    if chosen then
-        return chosen(unit), ns.db.provider
-    end
-    for _, name in ipairs(AUTO_ORDER) do
-        local frame = PROVIDERS[name](unit)
-        if frame then return frame, name end
-    end
-end
+local PROVIDERS = { FromEllesmere, FromElvUI, FromCompact, FromBlizzard }
 
 function Anchors.Resolve(unit)
-    local frame, provider = FindReal(unit)
-    if frame then return frame, provider end
-    local mock = mocks and mocks[unit]
-    if mock and mock:IsVisible() then
-        return mock, "preview"
+    for _, find in ipairs(PROVIDERS) do
+        local frame = find(unit)
+        if frame then return frame end
     end
+    local mock = mocks and mocks[unit]
+    if mock and mock:IsVisible() then return mock end
 end
 
 function Anchors.SetMocks(map)

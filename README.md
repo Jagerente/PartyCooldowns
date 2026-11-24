@@ -33,8 +33,9 @@ The icons attach to whatever party frames you use:
 - Blizzard party frames
 - Raid-style party frames
 - EllesmereUI
+- ElvUI
 
-The addon finds them on its own, but you can also pick one in the settings.
+The addon finds them on its own.
 
 ## Why the whole party needs it
 

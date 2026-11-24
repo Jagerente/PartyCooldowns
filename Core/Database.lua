@@ -3,7 +3,6 @@ local _, ns = ...
 local DEFAULTS = {
     enabled = true,
     locale = "auto",
-    provider = "auto",
     side = "RIGHT",
     align = "CENTER",
     offsetX = 4,
@@ -32,6 +31,8 @@ local CHAR_DEFAULTS = {
     learned = {},
 }
 
+local RETIRED = { "provider" }
+
 ns.DEFAULTS = DEFAULTS
 
 local function ApplyDefaults(target, defaults)
@@ -45,8 +46,13 @@ local function ApplyDefaults(target, defaults)
     return target
 end
 
+local function DropRetired(db)
+    for _, key in ipairs(RETIRED) do db[key] = nil end
+    return db
+end
+
 ns.Listen("INIT", function()
-    PartyCooldownsDB = ApplyDefaults(PartyCooldownsDB or {}, DEFAULTS)
+    PartyCooldownsDB = ApplyDefaults(DropRetired(PartyCooldownsDB or {}), DEFAULTS)
     PartyCooldownsCharDB = ApplyDefaults(PartyCooldownsCharDB or {}, CHAR_DEFAULTS)
     ns.db = PartyCooldownsDB
     ns.charDB = PartyCooldownsCharDB
